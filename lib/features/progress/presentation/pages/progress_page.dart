@@ -2,7 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 
 class ProgressPage extends StatelessWidget {
-  const ProgressPage({super.key});
+  /// Called when the back arrow is tapped.
+  /// If null, falls back to [Navigator.maybePop].
+  final VoidCallback? onBack;
+
+  const ProgressPage({super.key, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -11,7 +15,7 @@ class ProgressPage extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            _buildAppBar(),
+            _buildAppBar(context),
             Expanded(
               child: SingleChildScrollView(
                 child: Column(
@@ -37,12 +41,21 @@ class ProgressPage extends StatelessWidget {
     );
   }
 
-  Widget _buildAppBar() {
+  Widget _buildAppBar(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          GestureDetector(
+            onTap: () {
+              if (onBack != null) {
+                onBack!();
+              } else {
+                Navigator.maybePop(context);
+              }
+            },
+            child: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          ),
           const Spacer(),
           IconButton(
             onPressed: () {},

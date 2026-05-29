@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
+import 'package:trueschoolapp/features/homework/data/models/homework_item.dart';
+import 'package:trueschoolapp/features/homework/data/services/homework_service.dart';
+import 'package:trueschoolapp/features/homework/presentation/pages/homework_attempt_page.dart';
 import 'package:trueschoolapp/features/homework/presentation/widgets/homework_card.dart';
 import 'package:trueschoolapp/features/homework/presentation/widgets/homework_filter_chips.dart';
+import 'package:trueschoolapp/shared/widgets/skeleton.dart';
 
 class HomeworkPage extends StatefulWidget {
-  const HomeworkPage({super.key});
+  /// Called when the "Home" back button is tapped.
+  /// If null, falls back to [Navigator.maybePop].
+  final VoidCallback? onBack;
+
+  const HomeworkPage({super.key, this.onBack});
 
   @override
   State<HomeworkPage> createState() => _HomeworkPageState();
@@ -13,6 +21,8 @@ class HomeworkPage extends StatefulWidget {
 class _HomeworkPageState extends State<HomeworkPage> {
   String _selectedFilter = 'All';
   String _sortBy = 'Latest';
+  List<HomeworkItem> _allHomework = [];
+  bool _isLoading = true;
 
   final List<String> _filters = [
     'All',
@@ -21,6 +31,63 @@ class _HomeworkPageState extends State<HomeworkPage> {
     'In Progress',
     'Completed',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchHomework();
+  }
+
+  Future<void> _fetchHomework() async {
+    final homework = await HomeworkService.getStudentHomework();
+    if (mounted) {
+      setState(() {
+        _allHomework = homework;
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<HomeworkItem> get _filteredHomework {
+    List<HomeworkItem> filtered;
+    if (_selectedFilter == 'All') {
+      filtered = List.from(_allHomework);
+    } else {
+      final filterKey = _selectedFilter.toLowerCase().replaceAll(' ', '_');
+      filtered = _allHomework.where((hw) => hw.status == filterKey).toList();
+    }
+
+    // Sort
+    switch (_sortBy) {
+      case 'Due Date':
+        filtered.sort((a, b) => a.dueDate.compareTo(b.dueDate));
+        break;
+      case 'Subject':
+        filtered.sort((a, b) => a.subject.compareTo(b.subject));
+        break;
+      case 'Difficulty':
+        const order = {'low': 0, 'medium': 1, 'high': 2};
+        filtered.sort((a, b) =>
+            (order[a.difficultyLevel] ?? 1).compareTo(order[b.difficultyLevel] ?? 1));
+        break;
+      default: // Latest
+        filtered.sort((a, b) => b.assignedDate.compareTo(a.assignedDate));
+    }
+
+    return filtered;
+  }
+
+  void _navigateToAttempt(HomeworkItem homework) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => HomeworkAttemptPage(
+          homeworkId: homework.id,
+          title: homework.title,
+        ),
+      ),
+    ).then((_) => _fetchHomework()); // Refresh on return
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +110,13 @@ class _HomeworkPageState extends State<HomeworkPage> {
             ),
             const SizedBox(height: 20),
             Expanded(
-              child: _buildHomeworkList(),
+              child: _isLoading
+                  ? ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: 4,
+                      itemBuilder: (_, __) => const HomeworkCardSkeleton(),
+                    )
+                  : _buildHomeworkList(),
             ),
           ],
         ),
@@ -58,7 +131,13 @@ class _HomeworkPageState extends State<HomeworkPage> {
       child: Row(
         children: [
           GestureDetector(
-            onTap: () {},
+            onTap: () {
+              if (widget.onBack != null) {
+                widget.onBack!();
+              } else {
+                Navigator.maybePop(context);
+              }
+            },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
               decoration: BoxDecoration(
@@ -191,21 +270,70 @@ class _HomeworkPageState extends State<HomeworkPage> {
   }
 
   Widget _buildHomeworkList() {
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      children: const [
-        HomeworkCard(
-          subject: 'MATHEMATICS',
-          status: 'IN PROGRESS',
-          title: 'Algebra Basics - Chapter 3',
-          assignedBy: 'Assigned by Teacher',
-          dueDate: 'Due 5 Apr 2026',
-          difficulty: 'Medium',
-          estimatedTime: 'Est. Remaining: 30 mins',
-          progress: 0.0,
+    final homework = _filteredHomework;
+
+    if (homework.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.assignment_outlined, size: 56, color: Colors.grey.shade300),
+            const SizedBox(height: 12),
+            Text(
+              _selectedFilter == 'All'
+                  ? 'No homework assigned yet'
+                  : 'No $_selectedFilter homework',
+              style: const TextStyle(
+                fontSize: 16,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
         ),
-      ],
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _fetchHomework,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: homework.length,
+        itemBuilder: (context, index) {
+          final hw = homework[index];
+          return GestureDetector(
+            onTap: () => _navigateToAttempt(hw),
+            child: HomeworkCard(
+              subject: hw.subject.toUpperCase(),
+              status: hw.status.replaceAll('_', ' ').toUpperCase(),
+              title: hw.title,
+              assignedBy: 'Assigned by ${hw.assignedBy}',
+              dueDate: _formatDueDate(hw.dueDate),
+              difficulty: _capitalize(hw.difficultyLevel),
+              estimatedTime: 'Est. Remaining: ${hw.estimatedDurationMinutes} mins',
+              progress: hw.progressPercent / 100.0,
+              onTap: () => _navigateToAttempt(hw),
+            ),
+          );
+        },
+      ),
     );
+  }
+
+  String _formatDueDate(String dateStr) {
+    if (dateStr.isEmpty) return 'No due date';
+    try {
+      final date = DateTime.parse(dateStr);
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return 'Due ${date.day} ${months[date.month - 1]} ${date.year}';
+    } catch (_) {
+      return 'Due $dateStr';
+    }
+  }
+
+  String _capitalize(String s) {
+    if (s.isEmpty) return s;
+    return s[0].toUpperCase() + s.substring(1);
   }
 
   Widget _buildAiFab() {

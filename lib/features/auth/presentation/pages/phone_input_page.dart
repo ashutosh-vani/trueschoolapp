@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:trueschoolapp/app/routes/app_router.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
+import 'package:trueschoolapp/features/auth/data/services/auth_service.dart';
 import 'package:trueschoolapp/features/auth/presentation/widgets/app_logo.dart';
 
 class PhoneInputPage extends StatefulWidget {
@@ -16,6 +17,7 @@ class PhoneInputPage extends StatefulWidget {
 class _PhoneInputPageState extends State<PhoneInputPage> {
   final _phoneController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _isLoading = false;
 
   @override
   void dispose() {
@@ -23,15 +25,39 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
     super.dispose();
   }
 
-  void _sendOtp() {
-    if (_formKey.currentState!.validate()) {
+  Future<void> _sendOtp() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    final phone = _phoneController.text.trim();
+    final result = await AuthService.requestOtp(
+      phone: phone,
+      role: widget.role.toLowerCase(),
+    );
+
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    if (result.success) {
+      final devOtp = result.data?['dev_otp'];
       Navigator.pushNamed(
         context,
         AppRouter.otpVerification,
         arguments: {
-          'phoneNumber': '+91 ${_phoneController.text}',
+          'phoneNumber': '+91 $phone',
+          'phone': phone,
           'role': widget.role,
+          'devOtp': devOtp?.toString(),
         },
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'Failed to send OTP'),
+          backgroundColor: AppColors.error,
+        ),
       );
     }
   }
@@ -202,21 +228,30 @@ class _PhoneInputPageState extends State<PhoneInputPage> {
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
-        onPressed: _sendOtp,
+        onPressed: _isLoading ? null : _sendOtp,
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFFFF4757),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: const Text(
-          'Send OTP',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
+        child: _isLoading
+            ? const SizedBox(
+                height: 22,
+                width: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Text(
+                'Send OTP',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
       ),
     );
   }

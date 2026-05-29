@@ -10,6 +10,7 @@ class HomeworkCard extends StatelessWidget {
   final String difficulty;
   final String estimatedTime;
   final double progress;
+  final VoidCallback? onTap;
 
   const HomeworkCard({
     super.key,
@@ -21,6 +22,7 @@ class HomeworkCard extends StatelessWidget {
     required this.difficulty,
     required this.estimatedTime,
     required this.progress,
+    this.onTap,
   });
 
   Color _getStatusColor() {
@@ -230,7 +232,7 @@ class HomeworkCard extends StatelessWidget {
       children: [
         Expanded(
           child: OutlinedButton(
-            onPressed: () {},
+            onPressed: onTap,
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.primary,
               side: const BorderSide(color: AppColors.primary),

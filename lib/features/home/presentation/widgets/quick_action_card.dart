@@ -5,6 +5,7 @@ class QuickActionCard extends StatelessWidget {
   final String badge;
   final IconData icon;
   final List<Color> gradient;
+  final VoidCallback? onTap;
 
   const QuickActionCard({
     super.key,
@@ -12,11 +13,14 @@ class QuickActionCard extends StatelessWidget {
     required this.badge,
     required this.icon,
     required this.gradient,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
@@ -65,6 +69,7 @@ class QuickActionCard extends StatelessWidget {
           ),
         ],
       ),
+    ),
     );
   }
 }

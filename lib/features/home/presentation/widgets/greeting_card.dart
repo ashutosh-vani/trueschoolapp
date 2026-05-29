@@ -1,11 +1,73 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:trueschoolapp/app/theme/app_colors.dart';
+import 'package:trueschoolapp/config/app_config.dart';
+import 'package:trueschoolapp/features/auth/data/services/token_storage.dart';
+import 'package:trueschoolapp/shared/widgets/skeleton.dart';
 
-class GreetingCard extends StatelessWidget {
+class GreetingCard extends StatefulWidget {
   const GreetingCard({super.key});
 
   @override
+  State<GreetingCard> createState() => _GreetingCardState();
+}
+
+class _GreetingCardState extends State<GreetingCard> {
+  String _firstName = '';
+  int _streak = 0;
+  int _pendingTasks = 0;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await Future.wait([_loadName(), _loadStudyStats()]);
+    if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _loadName() async {
+    final name = await TokenStorage.getName();
+    if (mounted && name != null && name.isNotEmpty) {
+      setState(() => _firstName = name.trim().split(' ').first);
+    }
+  }
+
+  Future<void> _loadStudyStats() async {
+    try {
+      final token = await TokenStorage.getToken();
+      final response = await http.get(
+        Uri.parse('${AppConfig.apiUrl}/student/study-stats'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+      if (response.statusCode == 200 && mounted) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        setState(() {
+          _streak = (data['studyStreak'] as num?)?.toInt() ?? 0;
+        });
+      }
+    } catch (_) {}
+  }
+
+  String get _greeting {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning';
+    if (hour < 17) return 'Good Afternoon';
+    return 'Good Evening';
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Show skeleton while loading
+    if (_loading) return const GreetingCardSkeleton();
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(24),
@@ -20,12 +82,14 @@ class GreetingCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Expanded(
                 child: Text(
-                  'Good Morning, Alice! 👋',
-                  style: TextStyle(
+                  _firstName.isNotEmpty
+                      ? '$_greeting, $_firstName! 👋'
+                      : '$_greeting! 👋',
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
@@ -35,9 +99,11 @@ class GreetingCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          const Text(
-            'You have 0 tasks for today • Stay focused!',
-            style: TextStyle(
+          Text(
+            _pendingTasks > 0
+                ? 'You have $_pendingTasks tasks for today • Stay focused!'
+                : 'Stay focused and keep learning!',
+            style: const TextStyle(
               fontSize: 13,
               color: Colors.white70,
             ),
@@ -49,15 +115,15 @@ class GreetingCard extends StatelessWidget {
               color: Colors.white.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(20),
             ),
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text('🔥', style: TextStyle(fontSize: 18)),
-                SizedBox(width: 8),
+                const Text('🔥', style: TextStyle(fontSize: 18)),
+                const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    const Text(
                       'STREAK',
                       style: TextStyle(
                         fontSize: 10,
@@ -66,14 +132,16 @@ class GreetingCard extends StatelessWidget {
                         letterSpacing: 1,
                       ),
                     ),
-                    Text(
-                      '0 Days',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
+                    _loading
+                        ? const SizedBox(width: 40, height: 16)
+                        : Text(
+                            '$_streak ${_streak == 1 ? 'Day' : 'Days'}',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                   ],
                 ),
               ],

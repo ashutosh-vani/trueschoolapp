@@ -1,11 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
+import 'package:trueschoolapp/features/career/presentation/pages/career_explorer_page.dart';
+import 'package:trueschoolapp/features/exam_prep/presentation/pages/exam_prep_page.dart';
+import 'package:trueschoolapp/features/home/data/models/recent_activity_item.dart';
+import 'package:trueschoolapp/features/home/data/models/task_item.dart';
+import 'package:trueschoolapp/features/home/data/services/task_service.dart';
 import 'package:trueschoolapp/features/home/presentation/widgets/greeting_card.dart';
 import 'package:trueschoolapp/features/home/presentation/widgets/quick_action_card.dart';
+import 'package:trueschoolapp/features/homework/data/models/homework_item.dart';
+import 'package:trueschoolapp/features/homework/data/services/homework_service.dart';
+import 'package:trueschoolapp/features/homework/presentation/pages/homework_attempt_page.dart';
 import 'package:trueschoolapp/features/homework/presentation/pages/homework_page.dart';
+import 'package:trueschoolapp/app/routes/app_router.dart';
+import 'package:trueschoolapp/features/auth/data/services/token_storage.dart';
 import 'package:trueschoolapp/features/profile/presentation/pages/profile_page.dart';
+import 'package:trueschoolapp/features/notifications/presentation/pages/notifications_page.dart';
 import 'package:trueschoolapp/features/progress/presentation/pages/progress_page.dart';
+import 'package:trueschoolapp/shared/widgets/skeleton.dart';
 
 class StudentHomePage extends StatefulWidget {
   const StudentHomePage({super.key});
@@ -16,6 +28,162 @@ class StudentHomePage extends StatefulWidget {
 
 class _StudentHomePageState extends State<StudentHomePage> {
   int _currentIndex = 0;
+  List<RecentActivityItem> _recentActivities = [];
+  bool _isLoadingActivities = true;
+  List<HomeworkItem> _dueHomework = [];
+  String _userInitial = '';
+
+  // ── Task state ─────────────────────────────────────────────────────────────
+  List<TaskItem> _tasks = [];
+  bool _isLoadingTasks = true;
+  bool _isAddingTask = false;
+  final TextEditingController _taskController = TextEditingController();
+  final FocusNode _taskFocusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserInitial();
+    _loadHomeworkData();
+    _loadTasks();
+  }
+
+  @override
+  void dispose() {
+    _taskController.dispose();
+    _taskFocusNode.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadUserInitial() async {
+    final name = await TokenStorage.getName();
+    if (mounted && name != null && name.isNotEmpty) {
+      setState(() => _userInitial = name.trim()[0].toUpperCase());
+    }
+  }
+
+  /// Single API call that populates both Recent Activity and Today's Focus.
+  Future<void> _loadHomeworkData() async {
+    if (mounted) {
+      setState(() => _isLoadingActivities = true);
+    }
+
+    final homework = await HomeworkService.getStudentHomework();
+
+    if (!mounted) return;
+
+    // ── Today's Focus: pending / in_progress / overdue (up to 3) ──────────
+    final due = homework
+        .where((hw) =>
+            hw.status == 'pending' ||
+            hw.status == 'in_progress' ||
+            hw.status == 'overdue')
+        .take(3)
+        .toList();
+
+    // ── Recent Activity: derive from homework list ─────────────────────────
+    final allActivities = homework
+        .map((hw) => RecentActivityItem.fromHomework({
+              'id': hw.id,
+              'title': hw.title,
+              'subject': hw.subject,
+              'status': hw.status,
+              'assignedDate': hw.assignedDate,
+              'dueDate': hw.dueDate,
+            }))
+        .where((a) => a.title.isNotEmpty)
+        .toList();
+
+    allActivities.sort((a, b) {
+      final aActive = a.status != 'completed';
+      final bActive = b.status != 'completed';
+      if (aActive && !bActive) return -1;
+      if (!aActive && bActive) return 1;
+      if (a.timestamp != null && b.timestamp != null) {
+        return a.timestamp!.compareTo(b.timestamp!);
+      }
+      if (a.timestamp != null) return -1;
+      if (b.timestamp != null) return 1;
+      return 0;
+    });
+
+    setState(() {
+      _dueHomework = due;
+      _recentActivities = allActivities.take(5).toList();
+      _isLoadingActivities = false;
+    });
+  }
+
+  Future<void> _loadTasks() async {
+    final tasks = await TaskService.getTasks();
+    if (mounted) {
+      setState(() {
+        _tasks = List<TaskItem>.from(tasks);
+        _isLoadingTasks = false;
+      });
+    }
+  }
+
+  Future<void> _toggleTask(TaskItem task) async {
+    // Optimistic update — new list copy so Flutter detects the change
+    setState(() {
+      _tasks = _tasks
+          .map((t) => t.id == task.id ? t.copyWith(done: !t.done) : t)
+          .toList();
+    });
+
+    final newDone = await TaskService.toggleTask(task.id);
+    if (!mounted) return;
+
+    if (newDone != null) {
+      setState(() {
+        _tasks = _tasks
+            .map((t) => t.id == task.id ? t.copyWith(done: newDone) : t)
+            .toList();
+      });
+    } else {
+      // Revert on failure
+      setState(() {
+        _tasks = _tasks
+            .map((t) => t.id == task.id ? task : t)
+            .toList();
+      });
+    }
+  }
+
+  Future<void> _submitNewTask() async {
+    final title = _taskController.text.trim();
+    if (title.isEmpty) return;
+
+    // Close the input immediately with optimistic item visible
+    final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+    final optimistic = TaskItem(
+      id: tempId,
+      title: title,
+      subject: 'Custom',
+      done: false,
+      isOptimistic: true,
+    );
+
+    setState(() {
+      _tasks = [..._tasks, optimistic]; // new list — guarantees rebuild
+      _taskController.clear();
+      _isAddingTask = false;
+    });
+
+    // Call backend, then always reload from server to get the real ID
+    await TaskService.addTask(title);
+    final fresh = await TaskService.getTasks();
+    if (mounted) {
+      setState(() {
+        _tasks = fresh;
+        _isLoadingTasks = false;
+      });
+    }
+  }
+
+  /// Called after returning from homework attempt to refresh both sections.
+  Future<void> _refreshAfterAttempt() => _loadHomeworkData();
 
   @override
   Widget build(BuildContext context) {
@@ -31,16 +199,22 @@ class _StudentHomePageState extends State<StudentHomePage> {
   Widget _buildPlaceholder() {
     final labels = ['Home', 'Homework', 'AI', 'Progress', 'Profile'];
     if (_currentIndex == 1) {
-      return const HomeworkPage();
+      return HomeworkPage(
+        onBack: () => setState(() => _currentIndex = 0),
+      );
     }
     if (_currentIndex == 2) {
       return const AiTutorPage();
     }
     if (_currentIndex == 3) {
-      return const ProgressPage();
+      return ProgressPage(
+        onBack: () => setState(() => _currentIndex = 0),
+      );
     }
     if (_currentIndex == 4) {
-      return const ProfilePage();
+      return ProfilePage(
+        onBack: () => setState(() => _currentIndex = 0),
+      );
     }
     return Center(
       child: Text(
@@ -117,19 +291,62 @@ class _StudentHomePageState extends State<StudentHomePage> {
             ),
           ),
           const SizedBox(width: 4),
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primary, width: 2),
+          PopupMenuButton<String>(
+            onSelected: (value) async {
+              if (value == 'logout') {
+                await TokenStorage.clear();
+                if (context.mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    AppRouter.roleSelection,
+                    (_) => false,
+                  );
+                }
+              }
+            },
+            offset: const Offset(0, 44),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
             ),
-            child: const Center(
-              child: Text(
-                'A',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
+            elevation: 8,
+            shadowColor: Colors.black.withValues(alpha: 0.12),
+            color: Colors.white,
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                value: 'logout',
+                child: Row(
+                  children: const [
+                    Icon(
+                      Icons.logout_rounded,
+                      color: Color(0xFFE53935),
+                      size: 20,
+                    ),
+                    SizedBox(width: 10),
+                    Text(
+                      'Logout',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFFE53935),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+            child: Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.primary, width: 2),
+              ),
+              child: Center(
+                child: Text(
+                  _userInitial.isNotEmpty ? _userInitial : '?',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             ),
@@ -149,30 +366,34 @@ class _StudentHomePageState extends State<StudentHomePage> {
         mainAxisSpacing: 16,
         crossAxisSpacing: 16,
         childAspectRatio: 1.4,
-        children: const [
+        children: [
           QuickActionCard(
             title: 'Homework',
             badge: '0 PENDING',
             icon: Icons.menu_book_outlined,
             gradient: AppColors.homeworkGradient,
+            onTap: () => setState(() => _currentIndex = 1),
           ),
           QuickActionCard(
             title: 'LumiTutor',
             badge: '24/7 AVAILABLE',
             icon: Icons.auto_awesome,
             gradient: AppColors.tutorGradient,
+            onTap: () => setState(() => _currentIndex = 2),
           ),
           QuickActionCard(
             title: 'Learning Gaps',
             badge: 'ACTIVE GAPS',
             icon: Icons.warning_amber_rounded,
             gradient: AppColors.learningGapsGradient,
+            onTap: () => setState(() => _currentIndex = 3),
           ),
           QuickActionCard(
             title: 'My Portfolio',
             badge: 'SHOWCASE',
             icon: Icons.account_circle_outlined,
             gradient: AppColors.portfolioGradient,
+            onTap: () => setState(() => _currentIndex = 4),
           ),
         ],
       ),
@@ -189,18 +410,34 @@ class _StudentHomePageState extends State<StudentHomePage> {
         mainAxisSpacing: 16,
         crossAxisSpacing: 16,
         childAspectRatio: 1.4,
-        children: const [
+        children: [
           QuickActionCard(
             title: 'Exam Prep',
             badge: '0 TASKS',
             icon: Icons.description_outlined,
             gradient: AppColors.examPrepGradient,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ExamPrepPage(),
+                ),
+              );
+            },
           ),
           QuickActionCard(
             title: 'Career',
             badge: 'DISCOVER',
             icon: Icons.rocket_launch_outlined,
             gradient: AppColors.careerGradient,
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const CareerExplorerPage(),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -225,7 +462,14 @@ class _StudentHomePageState extends State<StudentHomePage> {
                 ),
               ),
               GestureDetector(
-                onTap: () {},
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationsPage(),
+                    ),
+                  );
+                },
                 child: const Text(
                   'See all',
                   style: TextStyle(
@@ -238,11 +482,69 @@ class _StudentHomePageState extends State<StudentHomePage> {
             ],
           ),
           const SizedBox(height: 16),
-          _buildActivityItem(
-            icon: Icons.menu_book_outlined,
-            title: 'Homework Assigned: Algebr...',
-            subtitle: 'Mathematics',
-          ),
+          if (_isLoadingActivities)
+            Column(
+              children: List.generate(
+                3,
+                (i) => Padding(
+                  padding: EdgeInsets.only(bottom: i < 2 ? 12 : 0),
+                  child: const ActivityItemSkeleton(),
+                ),
+              ),
+            )
+          else if (_recentActivities.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.04),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Text(
+                  'No recent activity yet',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            )
+          else
+            ...List.generate(_recentActivities.length, (index) {
+              final activity = _recentActivities[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  bottom: index < _recentActivities.length - 1 ? 12 : 0,
+                ),
+                child: GestureDetector(
+                  onTap: () {
+                    if (activity.id.isNotEmpty) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => HomeworkAttemptPage(
+                            homeworkId: activity.id,
+                            title: activity.title,
+                          ),
+                        ),
+                      ).then((_) => _refreshAfterAttempt());
+                    }
+                  },
+                  child: _buildActivityItem(
+                    icon: activity.icon,
+                    title: activity.title,
+                    subtitle: activity.subtitle,
+                  ),
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -295,17 +597,22 @@ class _StudentHomePageState extends State<StudentHomePage> {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textSecondary,
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                ),
+                ],
               ],
             ),
           ),
+          const SizedBox(width: 4),
           const Icon(
             Icons.chevron_right,
             color: AppColors.textSecondary,
@@ -347,6 +654,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ── HOMEWORK DUE section ──────────────────────────────────
                 const Text(
                   'HOMEWORK DUE',
                   style: TextStyle(
@@ -357,13 +665,97 @@ class _StudentHomePageState extends State<StudentHomePage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                _buildFocusTask(
-                  title: 'Algebra Basics - Chapter 3',
-                  subject: 'Mathematics',
-                  status: 'Overdue · 5 Apr',
+                if (_isLoadingActivities)
+                  Column(
+                    children: List.generate(
+                      2,
+                      (i) => Padding(
+                        padding: EdgeInsets.only(bottom: i < 1 ? 10 : 0),
+                        child: const FocusTaskSkeleton(),
+                      ),
+                    ),
+                  )
+                else if (_dueHomework.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'No homework due. You\'re all caught up!',
+                      style: TextStyle(
+                          fontSize: 14, color: AppColors.textSecondary),
+                    ),
+                  )
+                else
+                  ...List.generate(_dueHomework.length, (index) {
+                    final hw = _dueHomework[index];
+                    return Padding(
+                      padding: EdgeInsets.only(
+                        bottom: index < _dueHomework.length - 1 ? 10 : 0,
+                      ),
+                      child: GestureDetector(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => HomeworkAttemptPage(
+                                homeworkId: hw.id,
+                                title: hw.title,
+                              ),
+                            ),
+                          ).then((_) => _refreshAfterAttempt());
+                        },
+                        child: _buildFocusTask(
+                          title: hw.title,
+                          subject: hw.subject,
+                          status: _buildStatusText(hw),
+                          isOverdue: hw.status == 'overdue',
+                        ),
+                      ),
+                    );
+                  }),
+
+                // ── MY TASKS section ──────────────────────────────────────
+                const SizedBox(height: 20),
+                const Text(
+                  'MY TASKS',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                    letterSpacing: 0.8,
+                  ),
                 ),
-                const SizedBox(height: 16),
-                _buildAddTaskButton(),
+                const SizedBox(height: 10),
+                if (_isLoadingTasks)
+                  Column(
+                    children: List.generate(
+                      2,
+                      (_) => const TaskRowSkeleton(),
+                    ),
+                  )
+                else if (_tasks.isEmpty && !_isAddingTask)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      'No tasks yet. Add one to get started!',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade400,
+                      ),
+                    ),
+                  )
+                else
+                  ...List.generate(_tasks.length, (index) {
+                    final task = _tasks[index];
+                    return _buildTaskRow(task);
+                  }),
+
+                const SizedBox(height: 12),
+
+                // ── Inline add input or Add Task button ───────────────────
+                if (_isAddingTask)
+                  _buildAddTaskInput()
+                else
+                  _buildAddTaskButton(),
               ],
             ),
           ),
@@ -372,33 +764,232 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
+  Widget _buildTaskRow(TaskItem task) {
+    final isDone = task.done;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          // Checkbox
+          GestureDetector(
+            onTap: task.isOptimistic ? null : () => _toggleTask(task),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: isDone ? AppColors.primary : Colors.transparent,
+                border: Border.all(
+                  color: isDone ? AppColors.primary : Colors.grey.shade400,
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: isDone
+                  ? const Icon(Icons.check, size: 14, color: Colors.white)
+                  : null,
+            ),
+          ),
+          const SizedBox(width: 12),
+          // Title
+          Expanded(
+            child: Text(
+              task.title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: isDone
+                    ? AppColors.textSecondary
+                    : AppColors.textPrimary,
+                decoration: isDone ? TextDecoration.lineThrough : null,
+                decorationColor: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          // Optimistic spinner
+          if (task.isOptimistic)
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.5,
+                color: AppColors.primary,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAddTaskInput() {
+    return Row(
+      children: [
+        Expanded(
+          child: SizedBox(
+            height: 44,
+            child: TextField(
+              controller: _taskController,
+              focusNode: _taskFocusNode,
+              autofocus: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submitNewTask(),
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppColors.textPrimary,
+              ),
+              decoration: InputDecoration(
+                hintText: 'Task title...',
+                hintStyle: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textHint,
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 10),
+                isDense: true,
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(
+                      color: Colors.grey.shade300, width: 1.5),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(
+                      color: AppColors.primary, width: 1.5),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Add button
+        GestureDetector(
+          onTap: _submitNewTask,
+          child: Container(
+            height: 44,
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Center(
+              child: Text(
+                'Add',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Cancel button
+        GestureDetector(
+          onTap: () {
+            _taskController.clear();
+            setState(() => _isAddingTask = false);
+          },
+          child: Icon(Icons.close, size: 20, color: Colors.grey.shade400),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAddTaskButton() {
+    return GestureDetector(
+      onTap: () => setState(() => _isAddingTask = true),
+      child: CustomPaint(
+        painter: _DashedBorderPainter(
+          color: Colors.grey.shade300,
+          borderRadius: 12,
+          dashWidth: 6,
+          dashGap: 4,
+          strokeWidth: 1.5,
+        ),
+        child: SizedBox(
+          width: double.infinity,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.add, size: 18, color: Colors.grey.shade400),
+                const SizedBox(width: 6),
+                Text(
+                  'Add Task',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade400,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Homework focus card helpers ─────────────────────────────────────────────
+
+  String _buildStatusText(HomeworkItem hw) {
+    final dateStr = _formatShortDate(hw.dueDate);
+    if (hw.status == 'overdue') {
+      return dateStr.isNotEmpty ? 'Overdue · $dateStr' : 'Overdue';
+    } else if (hw.status == 'in_progress') {
+      return dateStr.isNotEmpty ? 'Due · $dateStr' : 'Due';
+    } else {
+      return dateStr.isNotEmpty ? 'Due · $dateStr' : 'Pending';
+    }
+  }
+
+  String _formatShortDate(String dateStr) {
+    if (dateStr.isEmpty) return '';
+    try {
+      final date = DateTime.parse(dateStr);
+      final months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      ];
+      return '${date.day} ${months[date.month - 1]}';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   Widget _buildFocusTask({
     required String title,
     required String subject,
     required String status,
+    bool isOverdue = false,
   }) {
+    const statusColor = AppColors.error;
+    const bgColor = Color(0xFFFFF0F0);
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(10),
+        color: bgColor,
+        borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
         children: [
           Container(
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: AppColors.error.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
+              color: statusColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(
-              Icons.assignment_outlined,
-              color: AppColors.error,
-              size: 18,
+              Icons.menu_book_rounded,
+              color: statusColor,
+              size: 22,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -406,13 +997,17 @@ class _StudentHomePageState extends State<StudentHomePage> {
                 Text(
                   title,
                   style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
                     color: AppColors.textPrimary,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                Row(
+                const SizedBox(height: 4),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
                   children: [
                     Text(
                       subject,
@@ -421,18 +1016,24 @@ class _StudentHomePageState extends State<StudentHomePage> {
                         color: AppColors.textSecondary,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    const Icon(
-                      Icons.error_outline,
-                      size: 12,
-                      color: AppColors.error,
+                    Text(
+                      '·',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade400,
+                      ),
                     ),
-                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.access_time_rounded,
+                      size: 12,
+                      color: statusColor,
+                    ),
                     Text(
                       status,
                       style: const TextStyle(
                         fontSize: 12,
-                        color: AppColors.error,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
                       ),
                     ),
                   ],
@@ -440,36 +1041,11 @@ class _StudentHomePageState extends State<StudentHomePage> {
               ],
             ),
           ),
-          const Icon(
+          const SizedBox(width: 4),
+          Icon(
             Icons.chevron_right,
-            color: AppColors.textSecondary,
+            color: Colors.grey.shade400,
             size: 20,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAddTaskButton() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.add, size: 18, color: AppColors.textSecondary),
-          SizedBox(width: 6),
-          Text(
-            'Add Task',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
           ),
         ],
       ),
@@ -559,4 +1135,59 @@ class _StudentHomePageState extends State<StudentHomePage> {
       ),
     );
   }
+}
+
+/// Paints a rounded-rectangle dashed border using [CustomPainter].
+class _DashedBorderPainter extends CustomPainter {
+  final Color color;
+  final double borderRadius;
+  final double dashWidth;
+  final double dashGap;
+  final double strokeWidth;
+
+  const _DashedBorderPainter({
+    required this.color,
+    this.borderRadius = 12,
+    this.dashWidth = 6,
+    this.dashGap = 4,
+    this.strokeWidth = 1.5,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..style = PaintingStyle.stroke;
+
+    final rrect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        strokeWidth / 2,
+        strokeWidth / 2,
+        size.width - strokeWidth,
+        size.height - strokeWidth,
+      ),
+      Radius.circular(borderRadius),
+    );
+
+    final path = Path()..addRRect(rrect);
+    final metrics = path.computeMetrics();
+
+    for (final metric in metrics) {
+      double distance = 0;
+      while (distance < metric.length) {
+        final end = (distance + dashWidth).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance += dashWidth + dashGap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_DashedBorderPainter old) =>
+      old.color != color ||
+      old.borderRadius != borderRadius ||
+      old.dashWidth != dashWidth ||
+      old.dashGap != dashGap ||
+      old.strokeWidth != strokeWidth;
 }

@@ -2,16 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:trueschoolapp/app/routes/app_router.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
+import 'package:trueschoolapp/features/auth/data/services/auth_service.dart';
+import 'package:trueschoolapp/features/auth/data/services/token_storage.dart';
 import 'package:trueschoolapp/features/auth/presentation/widgets/app_logo.dart';
 
 class OtpVerificationPage extends StatefulWidget {
-  final String phoneNumber;
+  final String phoneNumber; // formatted: "+91 9876543210"
+  final String phone; // raw: "9876543210"
   final String role;
+  final String? devOtp;
 
   const OtpVerificationPage({
     super.key,
     required this.phoneNumber,
+    required this.phone,
     required this.role,
+    this.devOtp,
   });
 
   @override
@@ -22,6 +28,8 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
   final List<TextEditingController> _otpControllers =
       List.generate(6, (_) => TextEditingController());
   final List<FocusNode> _focusNodes = List.generate(6, (_) => FocusNode());
+  bool _isLoading = false;
+  bool _isResending = false;
 
   @override
   void dispose() {
@@ -34,9 +42,43 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
     super.dispose();
   }
 
-  void _verifyOtp() {
+  Future<void> _verifyOtp() async {
     final otp = _otpControllers.map((c) => c.text).join();
-    if (otp.length == 6) {
+    if (otp.length != 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter the complete 6-digit OTP'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    final result = await AuthService.verifyOtp(
+      phone: widget.phone,
+      otp: otp,
+      role: widget.role.toLowerCase(),
+    );
+
+    setState(() => _isLoading = false);
+
+    if (!mounted) return;
+
+    if (result.success && result.data != null) {
+      // Store token and user info
+      await TokenStorage.saveToken(
+        token: result.data!['access_token'],
+        userId: result.data!['user_id'],
+        role: result.data!['role'],
+        name: result.data!['name'],
+        avatar: result.data!['avatar'],
+      );
+
+      if (!mounted) return;
+
+      // Navigate to home and clear the stack
       Navigator.pushNamedAndRemoveUntil(
         context,
         AppRouter.studentHome,
@@ -44,8 +86,37 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'Verification failed'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
+  Future<void> _resendOtp() async {
+    setState(() => _isResending = true);
+
+    final result = await AuthService.requestOtp(
+      phone: widget.phone,
+      role: widget.role.toLowerCase(),
+    );
+
+    setState(() => _isResending = false);
+
+    if (!mounted) return;
+
+    if (result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter the complete 6-digit OTP'),
+          content: Text('OTP resent successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.message ?? 'Failed to resend OTP'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -108,11 +179,13 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
             ),
           ),
           const SizedBox(height: 16),
-          _buildDevOtpHint(),
+          if (widget.devOtp != null) _buildDevOtpHint(),
           const SizedBox(height: 24),
           _buildOtpFields(),
           const SizedBox(height: 24),
           _buildVerifyButton(),
+          const SizedBox(height: 16),
+          _buildResendButton(),
         ],
       ),
     );
@@ -157,7 +230,7 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
             ),
           ),
           Text(
-            '654156',
+            widget.devOtp!,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.bold,
@@ -227,21 +300,52 @@ class _OtpVerificationPageState extends State<OtpVerificationPage> {
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
-        onPressed: _verifyOtp,
+        onPressed: _isLoading ? null : _verifyOtp,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primaryLight.withValues(alpha: 0.6),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
         ),
-        child: const Text(
-          'Verify & Login',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
-            color: Colors.white,
-          ),
-        ),
+        child: _isLoading
+            ? const SizedBox(
+                height: 22,
+                width: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Text(
+                'Verify & Login',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+      ),
+    );
+  }
+
+  Widget _buildResendButton() {
+    return Center(
+      child: TextButton(
+        onPressed: _isResending ? null : _resendOtp,
+        child: _isResending
+            ? const SizedBox(
+                height: 16,
+                width: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            : const Text(
+                'Resend OTP',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: AppColors.primary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
       ),
     );
   }

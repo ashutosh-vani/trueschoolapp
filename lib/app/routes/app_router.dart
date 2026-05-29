@@ -22,11 +22,13 @@ class AppRouter {
           builder: (_) => PhoneInputPage(role: role),
         );
       case otpVerification:
-        final args = settings.arguments as Map<String, String>;
+        final args = settings.arguments as Map<String, String?>;
         return MaterialPageRoute(
           builder: (_) => OtpVerificationPage(
             phoneNumber: args['phoneNumber']!,
+            phone: args['phone']!,
             role: args['role']!,
+            devOtp: args['devOtp'],
           ),
         );
       case studentHome:
