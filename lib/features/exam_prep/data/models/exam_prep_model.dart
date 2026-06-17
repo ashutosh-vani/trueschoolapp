@@ -310,6 +310,95 @@ class RevisionTask {
   }
 }
 
+// ── Day Plan (from /exam-prep/{id}/full-plan) ────────────────────────────────
+
+class DayPlanTask {
+  final String id;
+  final String subject;
+  final String topic;
+  final String taskType; // 'revise', 'importantq', 'notes', 'practice', 'last_day'
+  final int durationMinutes;
+  bool done;
+
+  DayPlanTask({
+    required this.id,
+    required this.subject,
+    required this.topic,
+    required this.taskType,
+    required this.durationMinutes,
+    this.done = false,
+  });
+
+  factory DayPlanTask.fromJson(Map<String, dynamic> json) => DayPlanTask(
+        id: json['id'] ?? json['_id'] ?? '',
+        subject: json['subject'] ?? '',
+        topic: json['topic'] ?? json['title'] ?? '',
+        taskType: json['task_type'] ?? json['taskType'] ?? 'revise',
+        durationMinutes: json['duration_minutes'] ?? json['durationMinutes'] ?? 15,
+        done: json['done'] ?? false,
+      );
+}
+
+class DayPlan {
+  final int dayNumber;
+  final String date;
+  final String label; // 'REVISION', 'LAST_DAY', etc.
+  final int totalMinutes;
+  final List<DayPlanTask> tasks;
+
+  DayPlan({
+    required this.dayNumber,
+    required this.date,
+    required this.label,
+    required this.totalMinutes,
+    required this.tasks,
+  });
+
+  factory DayPlan.fromJson(Map<String, dynamic> json) {
+    final tasks = (json['tasks'] as List<dynamic>? ?? [])
+        .map((t) => DayPlanTask.fromJson(t as Map<String, dynamic>))
+        .toList();
+    final totalMins = json['total_minutes'] ??
+        tasks.fold<int>(0, (sum, t) => sum + t.durationMinutes);
+    return DayPlan(
+      dayNumber: json['day_number'] ?? json['dayNumber'] ?? 1,
+      date: json['date'] ?? '',
+      label: json['label'] ?? json['mode'] ?? 'REVISION',
+      totalMinutes: totalMins,
+      tasks: tasks,
+    );
+  }
+}
+
+// ── Notes & Practice Subject Entry ───────────────────────────────────────────
+
+class SubjectNotes {
+  final String subject;
+  final List<String> noteTypes; // e.g. ['Short notes', 'Key concepts', 'Formulas']
+
+  SubjectNotes({required this.subject, required this.noteTypes});
+
+  factory SubjectNotes.fromJson(Map<String, dynamic> json) => SubjectNotes(
+        subject: json['subject'] ?? '',
+        noteTypes: (json['note_types'] ?? json['noteTypes'] as List<dynamic>? ?? [])
+            .cast<String>(),
+      );
+}
+
+class SubjectPractice {
+  final String subject;
+  final List<String> practiceTypes; // e.g. ['MCQ', 'Short Answer', 'Adaptive']
+
+  SubjectPractice({required this.subject, required this.practiceTypes});
+
+  factory SubjectPractice.fromJson(Map<String, dynamic> json) => SubjectPractice(
+        subject: json['subject'] ?? '',
+        practiceTypes:
+            (json['practice_types'] ?? json['practiceTypes'] as List<dynamic>? ?? [])
+                .cast<String>(),
+      );
+}
+
 // ── Study Stats (from /student/study-stats) ───────────────────────────────────
 class StudyStats {
   final int studyStreak;

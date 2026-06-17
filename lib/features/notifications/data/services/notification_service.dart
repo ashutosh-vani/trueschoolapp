@@ -54,4 +54,16 @@ class NotificationService {
       return false;
     }
   }
+
+  /// Returns the number of unread notifications without exposing the full list.
+  /// Derived client-side (same pattern as the web app — no dedicated endpoint).
+  static Future<int> getUnreadCount() async {
+    try {
+      final items = await getNotifications();
+      return items.where((n) => !n.read).length;
+    } catch (e) {
+      debugPrint('[NotificationService] getUnreadCount error: $e');
+      return 0;
+    }
+  }
 }

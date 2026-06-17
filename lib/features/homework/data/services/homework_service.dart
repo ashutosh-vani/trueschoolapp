@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:trueschoolapp/config/app_config.dart';
@@ -78,6 +79,33 @@ class HomeworkService {
       return [];
     } catch (e) {
       return [];
+    }
+  }
+
+  /// POST /homework/upload-file — upload a file and return its URL
+  static Future<String?> uploadFile(File file) async {
+    try {
+      final token = await TokenStorage.getToken();
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/homework/upload-file'),
+      )
+        ..headers['Authorization'] = 'Bearer $token'
+        ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+
+      debugPrint('[HomeworkService] POST /homework/upload-file → ${response.statusCode}');
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data['url'] as String?;
+      }
+      return null;
+    } catch (e) {
+      debugPrint('[HomeworkService] uploadFile error: $e');
+      return null;
     }
   }
 

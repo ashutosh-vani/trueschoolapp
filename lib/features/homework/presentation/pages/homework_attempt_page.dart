@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/homework/data/models/homework_question.dart';
 import 'package:trueschoolapp/features/homework/data/services/homework_service.dart';
+import 'package:trueschoolapp/features/homework/presentation/pages/homework_result_page.dart';
 
 class HomeworkAttemptPage extends StatefulWidget {
   final String homeworkId;
@@ -23,13 +27,31 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
   bool _isSubmitting = false;
   int _currentIndex = 0;
   final Map<String, String?> _answers = {};
+  final Map<String, XFile?> _uploadFiles = {}; // per-question uploaded file
+  final Map<String, TextEditingController> _typedControllers = {}; // per-question text controllers
   final Map<String, String> _activeAnswerType = {}; // per-question active type
   String? _errorMessage;
+  final ImagePicker _imagePicker = ImagePicker();
 
   @override
   void initState() {
     super.initState();
     _loadQuestions();
+  }
+
+  @override
+  void dispose() {
+    for (final ctrl in _typedControllers.values) {
+      ctrl.dispose();
+    }
+    super.dispose();
+  }
+
+  TextEditingController _controllerFor(String questionId) {
+    return _typedControllers.putIfAbsent(
+      questionId,
+      () => TextEditingController(text: _answers[questionId] ?? ''),
+    );
   }
 
   Future<void> _loadQuestions() async {
@@ -76,11 +98,36 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
   Future<void> _submitAnswers() async {
     setState(() => _isSubmitting = true);
 
+    // First, upload any pending files and collect the remote URLs
+    final Map<String, String?> uploadedUrls = {};
+    for (final entry in _uploadFiles.entries) {
+      if (entry.value != null) {
+        final url = await HomeworkService.uploadFile(File(entry.value!.path));
+        uploadedUrls[entry.key] = url;
+        if (url == null && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('File upload failed. Submitting without attachment.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+      }
+    }
+
     final answersPayload = _questions.map((q) {
+      final activeType = _getActiveType(q);
+      String? answer;
+      if (activeType == 'upload') {
+        // Prefer the remote URL; fall back to local path if upload failed
+        answer = uploadedUrls[q.id] ?? _uploadFiles[q.id]?.path;
+      } else {
+        answer = _answers[q.id];
+      }
       return {
         'question_id': q.id,
-        'answer': _answers[q.id],
-        'answer_type': _getActiveType(q),
+        'answer': answer,
+        'answer_type': activeType,
       };
     }).toList();
 
@@ -92,72 +139,30 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
     if (mounted) {
       setState(() => _isSubmitting = false);
 
-      if (result != null) {
-        _showResultDialog(result);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to submit. Please try again.'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+      // Build a string-keyed answers map for the result page
+      final answersMap = <String, String?>{};
+      for (final q in _questions) {
+        final activeType = _getActiveType(q);
+        if (activeType == 'upload') {
+          answersMap[q.id] = _uploadFiles[q.id]?.path;
+        } else {
+          answersMap[q.id] = _answers[q.id];
+        }
       }
-    }
-  }
 
-  void _showResultDialog(Map<String, dynamic> result) {
-    final autoScore = result['auto_score_pct'];
-    final mcqEarned = result['mcq_earned'] ?? 0;
-    final mcqTotal = result['mcq_total'] ?? 0;
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.check_circle, color: AppColors.success, size: 28),
-            SizedBox(width: 10),
-            Text('Submitted!'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (autoScore != null) ...[
-              Text(
-                'Score: $autoScore%',
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'MCQ: $mcqEarned / $mcqTotal correct',
-                style: const TextStyle(fontSize: 14, color: AppColors.textSecondary),
-              ),
-            ] else
-              const Text(
-                'Your answers have been submitted for review.',
-                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop();
-              Navigator.of(context).pop();
-            },
-            child: const Text('Done'),
+      // Navigate to full result page (replaces old dialog)
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => HomeworkResultPage(
+            homeworkId: widget.homeworkId,
+            homeworkTitle: widget.title,
+            apiResult: result,
+            questionSet: _questions,
+            answers: answersMap,
           ),
-        ],
-      ),
-    );
+        ),
+      );
+    }
   }
 
   void _showSaveExitDialog() {
@@ -311,7 +316,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
             icon: Icons.smart_toy_outlined,
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Vin AI coming soon!')),
+                const SnackBar(content: Text('TrueSchoolAI coming soon!')),
               );
             },
           ),
@@ -610,6 +615,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
 
   // ── Typed Input with Toolbar ──
   Widget _buildTypedInput(HomeworkQuestion question) {
+    final controller = _controllerFor(question.id);
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
@@ -665,8 +671,9 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
               ],
             ),
           ),
-          // Text area
+          // Text area — uses a persistent controller so the answer is retained
           TextField(
+            controller: controller,
             maxLines: 8,
             onChanged: (value) {
               setState(() {
@@ -701,7 +708,94 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
   }
 
   // ── Upload Input ──
+  Future<void> _pickImage(HomeworkQuestion question, ImageSource source) async {
+    try {
+      final XFile? picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
+      if (picked != null && mounted) {
+        setState(() {
+          _uploadFiles[question.id] = picked;
+          // Store the file path as the answer so canProceed can check it
+          _answers[question.id] = picked.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not pick image: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickFile(HomeworkQuestion question) async {
+    // Fall back to gallery when no dedicated file picker package is present
+    await _pickImage(question, ImageSource.gallery);
+  }
+
   Widget _buildUploadInput(HomeworkQuestion question) {
+    final uploadedFile = _uploadFiles[question.id];
+
+    if (uploadedFile != null) {
+      // Show picked file preview
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.green.shade300, width: 2),
+          borderRadius: BorderRadius.circular(14),
+          color: Colors.green.shade50,
+        ),
+        child: Column(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.file(
+                File(uploadedFile.path),
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(
+                  Icons.insert_drive_file_outlined,
+                  size: 64,
+                  color: Colors.green,
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    uploadedFile.name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: () {
+                setState(() {
+                  _uploadFiles.remove(question.id);
+                  _answers.remove(question.id);
+                });
+              },
+              icon: const Icon(Icons.delete_outline, color: Colors.red),
+              label: const Text('Remove & re-upload', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
       decoration: BoxDecoration(
@@ -764,7 +858,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () {},
+              onPressed: () => _pickImage(question, ImageSource.camera),
               icon: const Icon(Icons.photo_camera_outlined, size: 20),
               label: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.bold)),
               style: ElevatedButton.styleFrom(
@@ -781,7 +875,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () {},
+              onPressed: () => _pickFile(question),
               icon: const Icon(Icons.file_upload_outlined, size: 20),
               label: const Text('Browse Files', style: TextStyle(fontWeight: FontWeight.bold)),
               style: OutlinedButton.styleFrom(
@@ -841,6 +935,22 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
     final question = _questions[_currentIndex];
     final activeType = _getActiveType(question);
     final isTyped = activeType == 'typed';
+    final isUpload = activeType == 'upload';
+
+    // Determine whether the user has provided a valid answer
+    bool canProceed;
+    if (isTyped) {
+      canProceed = (currentAnswer ?? '').trim().length > 4;
+    } else if (isUpload) {
+      canProceed = _uploadFiles[question.id] != null;
+    } else {
+      // MCQ
+      canProceed = currentAnswer != null;
+    }
+
+    final String buttonLabel = isLast
+        ? (isTyped || isUpload ? 'Submit All' : 'Submit\nAnswer')
+        : (isTyped ? 'Next' : isUpload ? 'Next' : 'Submit\nAnswer');
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -907,9 +1017,9 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
               ),
             ),
           if (!isLast) const SizedBox(width: 12),
-          // Submit Answer / Retry Similar button
+          // Next / Submit button
           GestureDetector(
-            onTap: _isSubmitting
+            onTap: (_isSubmitting || !canProceed)
                 ? null
                 : () {
                     if (isLast) {
@@ -921,9 +1031,9 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: currentAnswer != null ? 1.0 : 0.5),
+                color: AppColors.primary.withValues(alpha: canProceed ? 1.0 : 0.4),
                 borderRadius: BorderRadius.circular(28),
-                boxShadow: currentAnswer != null
+                boxShadow: canProceed
                     ? [
                         BoxShadow(
                           color: AppColors.primary.withValues(alpha: 0.3),
@@ -946,7 +1056,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          isTyped ? 'Retry\nSimilar' : 'Submit\nAnswer',
+                          buttonLabel,
                           textAlign: TextAlign.center,
                           style: const TextStyle(
                             fontSize: 13,

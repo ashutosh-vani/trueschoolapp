@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
 import 'package:trueschoolapp/features/career/presentation/pages/career_explorer_page.dart';
-import 'package:trueschoolapp/features/exam_prep/presentation/pages/exam_prep_page.dart';
+import 'package:trueschoolapp/features/exam_prep/presentation/pages/exam_prep_list_page.dart';
+import 'package:trueschoolapp/features/learning_gaps/presentation/pages/learning_gap_hub_page.dart';
 import 'package:trueschoolapp/features/home/data/models/recent_activity_item.dart';
 import 'package:trueschoolapp/features/home/data/models/task_item.dart';
 import 'package:trueschoolapp/features/home/data/services/task_service.dart';
@@ -15,6 +17,7 @@ import 'package:trueschoolapp/features/homework/presentation/pages/homework_page
 import 'package:trueschoolapp/app/routes/app_router.dart';
 import 'package:trueschoolapp/features/auth/data/services/token_storage.dart';
 import 'package:trueschoolapp/features/profile/presentation/pages/profile_page.dart';
+import 'package:trueschoolapp/features/notifications/data/services/notification_service.dart';
 import 'package:trueschoolapp/features/notifications/presentation/pages/notifications_page.dart';
 import 'package:trueschoolapp/features/progress/presentation/pages/progress_page.dart';
 import 'package:trueschoolapp/shared/widgets/skeleton.dart';
@@ -32,6 +35,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
   bool _isLoadingActivities = true;
   List<HomeworkItem> _dueHomework = [];
   String _userInitial = '';
+  int _unreadNotifCount = 0;
 
   // ── Task state ─────────────────────────────────────────────────────────────
   List<TaskItem> _tasks = [];
@@ -46,6 +50,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
     _loadUserInitial();
     _loadHomeworkData();
     _loadTasks();
+    _loadUnreadCount();
   }
 
   @override
@@ -59,6 +64,13 @@ class _StudentHomePageState extends State<StudentHomePage> {
     final name = await TokenStorage.getName();
     if (mounted && name != null && name.isNotEmpty) {
       setState(() => _userInitial = name.trim()[0].toUpperCase());
+    }
+  }
+
+  Future<void> _loadUnreadCount() async {
+    final count = await NotificationService.getUnreadCount();
+    if (mounted) {
+      setState(() => _unreadNotifCount = count);
     }
   }
 
@@ -187,12 +199,20 @@ class _StudentHomePageState extends State<StudentHomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: _currentIndex == 0 ? _buildHomeContent() : _buildPlaceholder(),
+    return PopScope(
+      canPop: false, // prevent back navigation to auth screens
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          SystemNavigator.pop();
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: SafeArea(
+          child: _currentIndex == 0 ? _buildHomeContent() : _buildPlaceholder(),
+        ),
+        bottomNavigationBar: _buildBottomNav(),
       ),
-      bottomNavigationBar: _buildBottomNav(),
     );
   }
 
@@ -282,12 +302,62 @@ class _StudentHomePageState extends State<StudentHomePage> {
               size: 20,
             ),
           ),
+          const SizedBox(width: 10),
+          const Text(
+            'TrueSchool Student',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
           const Spacer(),
           IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.notifications_outlined,
-              color: AppColors.textPrimary,
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const NotificationsPage(),
+                ),
+              ).then((_) => _loadUnreadCount());
+            },
+            icon: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                const Icon(
+                  Icons.notifications_outlined,
+                  color: AppColors.textPrimary,
+                ),
+                if (_unreadNotifCount > 0)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      padding: const EdgeInsets.all(2),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          _unreadNotifCount > 99
+                              ? '99+'
+                              : '$_unreadNotifCount',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           const SizedBox(width: 4),
@@ -386,7 +456,10 @@ class _StudentHomePageState extends State<StudentHomePage> {
             badge: 'ACTIVE GAPS',
             icon: Icons.warning_amber_rounded,
             gradient: AppColors.learningGapsGradient,
-            onTap: () => setState(() => _currentIndex = 3),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const LearningGapHubPage()),
+            ),
           ),
           QuickActionCard(
             title: 'My Portfolio',
@@ -420,7 +493,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => const ExamPrepPage(),
+                  builder: (_) => const ExamPrepListPage(),
                 ),
               );
             },

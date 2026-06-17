@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/config/app_config.dart';
 import 'package:trueschoolapp/features/ai_tutor/data/services/vin_ai_service.dart';
@@ -84,6 +85,11 @@ class _AiTutorPageState extends State<AiTutorPage> {
   // Upload state
   final _picker = ImagePicker();
 
+  // ── Speech-to-text ─────────────────────────────────────────────────────────
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  bool _isListening = false;
+
   // Attached images — list of {file, uploadedUrl}
   // Max 10, matching the web "Add more (x/10)" pattern
   final List<_AttachedImage> _attachedImages = [];
@@ -105,11 +111,13 @@ class _AiTutorPageState extends State<AiTutorPage> {
     super.initState();
     _loadUserName();
     _loadHistory();
+    _initSpeech();
   }
 
   @override
   void dispose() {
     _streamSub?.cancel();
+    _speech.cancel();
     _inputController.dispose();
     _scrollController.dispose();
     _inputFocus.dispose();
@@ -132,6 +140,68 @@ class _AiTutorPageState extends State<AiTutorPage> {
         _historyLoading = false;
       });
     }
+  }
+
+  // ── Speech-to-text ──────────────────────────────────────────────────────────
+  Future<void> _initSpeech() async {
+    final available = await _speech.initialize(
+      onStatus: (status) {
+        if (status == 'done' || status == 'notListening') {
+          if (mounted) setState(() => _isListening = false);
+        }
+      },
+      onError: (error) {
+        debugPrint('[STT] error: $error');
+        if (mounted) setState(() => _isListening = false);
+      },
+    );
+    if (mounted) setState(() => _speechAvailable = available);
+  }
+
+  Future<void> _toggleListening() async {
+    if (!_speechAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Speech recognition not available on this device.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (_isListening) {
+      await _speech.stop();
+      setState(() => _isListening = false);
+      return;
+    }
+
+    // Keep whatever the user already typed — append to it
+    final existingText = _inputController.text;
+
+    setState(() => _isListening = true);
+
+    await _speech.listen(
+      onResult: (result) {
+        if (mounted) {
+          setState(() {
+            _inputController.text = existingText.isEmpty
+                ? result.recognizedWords
+                : '$existingText ${result.recognizedWords}';
+            // Move cursor to end
+            _inputController.selection = TextSelection.fromPosition(
+              TextPosition(offset: _inputController.text.length),
+            );
+          });
+        }
+      },
+      listenOptions: stt.SpeechListenOptions(
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+        partialResults: true,
+        localeId: 'en_US',
+        listenMode: stt.ListenMode.dictation,
+      ),
+    );
   }
 
   void _scrollToBottom() {
@@ -330,19 +400,33 @@ class _AiTutorPageState extends State<AiTutorPage> {
 
   void _sendWithImages(String customQuestion) {
     if (_attachedImages.isEmpty) return;
+
+    // Only use images that have finished uploading
     final readyUrls = _attachedImages
         .where((img) => img.uploadedUrl != null)
         .map((img) => img.uploadedUrl!)
         .toList();
 
+    if (readyUrls.isEmpty) {
+      // Still uploading — wait
+      _showUploadError('Image is still uploading, please wait.');
+      return;
+    }
+
     final String msg;
     if (customQuestion.trim().isNotEmpty) {
-      msg = '${customQuestion.trim()}\n\n'
-          'Image${readyUrls.length > 1 ? 's' : ''}: ${readyUrls.join(', ')}';
+      // User typed a question: "<question> Image URL: <url>"
+      // Matches web format exactly
+      msg = readyUrls.length == 1
+          ? "${customQuestion.trim()} Image URL: ${readyUrls.first}"
+          : "${customQuestion.trim()} Image URLs: ${readyUrls.join(', ')}";
     } else {
-      msg = "I've uploaded a problem image. Please help me solve it step by step.\n\n"
-          "Image${readyUrls.length > 1 ? 's' : ''}: ${readyUrls.join(', ')}";
+      // "Solve this problem for me" — exact same string the web sends
+      msg = readyUrls.length == 1
+          ? "I've uploaded a problem image. Please help me solve it. Image URL: ${readyUrls.first}"
+          : "I've uploaded a problem image. Please help me solve it. Image URLs: ${readyUrls.join(', ')}";
     }
+
     _clearAttachments();
     _inputController.clear();
     _sendMessage(msg);
@@ -408,31 +492,104 @@ class _AiTutorPageState extends State<AiTutorPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5FA),
-      body: Stack(
-        children: [
-          Column(
-            children: [
-              // Thin gradient bar at very top (no app bar)
-              _buildTopGradientBar(),
-              Expanded(child: _buildBody()),
-              _buildFooter(),
-            ],
-          ),
-          if (_showHistoryDrawer) _buildHistoryDrawer(),
-        ],
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Column(
+              children: [
+                // Top bar with gradient accent and menu icon
+                _buildTopBar(),
+                Expanded(child: _buildBody()),
+                _buildFooter(),
+              ],
+            ),
+            if (_showHistoryDrawer) _buildHistoryDrawer(),
+          ],
+        ),
       ),
     );
   }
 
-  // ── Thin gradient bar (replaces app bar) ─────────────────────────────────
-  Widget _buildTopGradientBar() {
-    return Container(
-      height: 4,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFF9B59B6), Color(0xFF667EEA)],
+  // ── Top bar with gradient accent and history menu icon ────────────────────
+  Widget _buildTopBar() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // Thin gradient accent line
+        Container(
+          height: 4,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Color(0xFF9B59B6), Color(0xFF667EEA)],
+            ),
+          ),
         ),
-      ),
+        // Header row with title and menu icon
+        Container(
+          color: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              // Lumi avatar (small)
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: ClipOval(
+                  child: Image.network(
+                    _kAvatarUrl,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: const Color(0xFF2D2D3A),
+                      child: const Icon(Icons.person,
+                          color: Colors.white70, size: 16),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Expanded(
+                child: Text(
+                  'LumiTutor',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1A1A2E),
+                    fontFamily: 'Poppins',
+                  ),
+                ),
+              ),
+              // History menu icon button
+              GestureDetector(
+                onTap: () => setState(() => _showHistoryDrawer = true),
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.15)),
+                  ),
+                  child: const Icon(
+                    Icons.menu_book_rounded,
+                    color: AppColors.primary,
+                    size: 20,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Bottom border for header
+        Container(
+          height: 1,
+          color: const Color(0xFFF0F0F5),
+        ),
+      ],
     );
   }
 
@@ -631,7 +788,7 @@ class _AiTutorPageState extends State<AiTutorPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Vin AI',
+                const Text('TrueSchoolAI',
                     style: TextStyle(
                         fontSize: 10,
                         color: Color(0xFF6B7280),
@@ -767,12 +924,6 @@ class _AiTutorPageState extends State<AiTutorPage> {
                 color: AppColors.primary,
                 onTap: _handleFormulaHelp,
               ),
-              _buildActionChip(
-                Icons.history_edu,
-                'Past Lessons',
-                color: AppColors.primary,
-                onTap: _handlePastLessons,
-              ),
               if (hasMessages && !hasAttachments) ...[
                 _buildActionChip(
                   Icons.image_search_outlined,
@@ -826,12 +977,36 @@ class _AiTutorPageState extends State<AiTutorPage> {
                         : _sendMessage,
                   ),
                 ),
-                const Icon(Icons.mic_outlined,
-                    color: Color(0xFF6B7280), size: 22),
-                const SizedBox(width: 8),
+                // ── Mic button ─────────────────────────────────────────
+                GestureDetector(
+                  onTap: _toggleListening,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: _isListening
+                          ? const Color(0xFFDC2626).withValues(alpha: 0.12)
+                          : Colors.transparent,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _isListening ? Icons.mic : Icons.mic_outlined,
+                      color: _isListening
+                          ? const Color(0xFFDC2626)
+                          : (_speechAvailable
+                              ? const Color(0xFF6B7280)
+                              : const Color(0xFFD1D5DB)),
+                      size: 22,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // ── Send button ────────────────────────────────────────
                 GestureDetector(
                   onTap: _status == _Status.idle
                       ? () {
+                          if (_isListening) _speech.stop();
                           if (hasAttachments) {
                             _sendWithImages(_inputController.text);
                           } else {

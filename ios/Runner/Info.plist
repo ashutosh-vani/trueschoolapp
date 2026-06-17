@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>LumiTutor uses your microphone to transcribe your question via speech-to-text.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>LumiTutor uses speech recognition to convert your voice into text so you can ask questions hands-free.</string>
 </dict>
 </plist>

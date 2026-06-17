@@ -1,12 +1,71 @@
 import 'package:flutter/material.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
+import 'package:trueschoolapp/features/auth/data/services/token_storage.dart';
+import 'package:trueschoolapp/features/progress/data/models/learning_gap_models.dart';
+import 'package:trueschoolapp/features/progress/data/services/learning_gap_service.dart';
+import 'package:trueschoolapp/features/progress/presentation/pages/learning_gaps_list_page.dart';
+import 'package:trueschoolapp/features/progress/presentation/pages/quiz_selector_page.dart';
 
-class ProgressPage extends StatelessWidget {
+class ProgressPage extends StatefulWidget {
   /// Called when the back arrow is tapped.
   /// If null, falls back to [Navigator.maybePop].
   final VoidCallback? onBack;
 
   const ProgressPage({super.key, this.onBack});
+
+  @override
+  State<ProgressPage> createState() => _ProgressPageState();
+}
+
+class _ProgressPageState extends State<ProgressPage> {
+  GapHealth _health = GapHealth.fallback;
+  bool _loading = true;
+  String _userInitial = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _loadUserInitial();
+  }
+
+  Future<void> _loadUserInitial() async {
+    final name = await TokenStorage.getName();
+    if (mounted && name != null && name.isNotEmpty) {
+      setState(() => _userInitial = name.trim()[0].toUpperCase());
+    }
+  }
+
+  Future<void> _load() async {
+    final health = await LearningGapService.getHealth();
+    if (!mounted) return;
+    setState(() {
+      _health = health;
+      _loading = false;
+    });
+  }
+
+  void _goBack(BuildContext context) {
+    if (widget.onBack != null) {
+      widget.onBack!();
+    } else {
+      Navigator.maybePop(context);
+    }
+  }
+
+  void _openLearningGaps() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const LearningGapsListPage()),
+    );
+  }
+
+  void _openQuizSelector() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const QuizSelectorPage()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -15,74 +74,32 @@ class ProgressPage extends StatelessWidget {
       body: SafeArea(
         child: Column(
           children: [
-            _buildAppBar(context),
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 24),
-                    _buildHeroBanner(),
-                    const SizedBox(height: 24),
-                    _buildLearningGapsCard(),
-                    const SizedBox(height: 20),
-                    _buildQuizzesCard(),
-                    const SizedBox(height: 24),
-                    _buildCommunitySection(),
-                    const SizedBox(height: 20),
-                    _buildPoweredBy(),
-                    const SizedBox(height: 32),
-                  ],
+              child: RefreshIndicator(
+                onRefresh: _load,
+                color: AppColors.primary,
+                child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 24),
+                      _buildHeroBanner(),
+                      const SizedBox(height: 24),
+                      _buildLearningGapsCard(),
+                      const SizedBox(height: 20),
+                      _buildQuizzesCard(),
+                      const SizedBox(height: 24),
+                      _buildCommunitySection(),
+                      const SizedBox(height: 20),
+                      _buildPoweredBy(),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
                 ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildAppBar(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        children: [
-          GestureDetector(
-            onTap: () {
-              if (onBack != null) {
-                onBack!();
-              } else {
-                Navigator.maybePop(context);
-              }
-            },
-            child: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
-          ),
-          const Spacer(),
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(
-              Icons.notifications_outlined,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.primary, width: 2),
-            ),
-            child: const Center(
-              child: Text(
-                'A',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -135,6 +152,9 @@ class ProgressPage extends StatelessWidget {
   }
 
   Widget _buildLearningGapsCard() {
+    final criticalCount = _loading ? 0 : _health.severity.critical;
+    final healthScore = _loading ? 100 : _health.score;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(24),
@@ -184,19 +204,55 @@ class ProgressPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _buildAlertBadge(
-            icon: Icons.error_outline,
-            text: '1 Critical gaps identified',
-            color: AppColors.error,
-          ),
-          const SizedBox(height: 10),
-          _buildAlertBadge(
-            icon: Icons.shield_outlined,
-            text: 'Health Score: 100%',
-            color: AppColors.textPrimary,
-          ),
+          if (_loading)
+            _buildLoadingBadge()
+          else ...[
+            _buildAlertBadge(
+              icon: Icons.error_outline,
+              text: '$criticalCount Critical gap${criticalCount == 1 ? '' : 's'} identified',
+              color: AppColors.error,
+            ),
+            const SizedBox(height: 10),
+            _buildAlertBadge(
+              icon: Icons.shield_outlined,
+              text: 'Health Score: $healthScore%',
+              color: AppColors.textPrimary,
+            ),
+          ],
           const SizedBox(height: 20),
-          _buildPrimaryButton('View My Gaps'),
+          _buildPrimaryButton('View My Gaps', _openLearningGaps),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingBadge() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.border,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.primary,
+            ),
+          ),
+          SizedBox(width: 8),
+          Text(
+            'Loading data...',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textSecondary,
+            ),
+          ),
         ],
       ),
     );
@@ -291,9 +347,9 @@ class ProgressPage extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.bolt, size: 16, color: AppColors.success),
+                const Icon(Icons.bolt, size: 16, color: AppColors.success),
                 const SizedBox(width: 6),
-                Text(
+                const Text(
                   'New quizzes available',
                   style: TextStyle(
                     fontSize: 13,
@@ -305,18 +361,18 @@ class ProgressPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 20),
-          _buildPrimaryButton('Take a Quiz'),
+          _buildPrimaryButton('Take a Quiz', _openQuizSelector),
         ],
       ),
     );
   }
 
-  Widget _buildPrimaryButton(String label) {
+  Widget _buildPrimaryButton(String label, VoidCallback onTap) {
     return SizedBox(
       width: double.infinity,
       height: 52,
       child: ElevatedButton(
-        onPressed: () {},
+        onPressed: onTap,
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           shape: RoundedRectangleBorder(
@@ -413,9 +469,9 @@ class ProgressPage extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
+          const Icon(Icons.auto_awesome, size: 16, color: AppColors.primary),
           const SizedBox(width: 8),
-          Text(
+          const Text(
             'POWERED BY LUMITUTOR',
             style: TextStyle(
               fontSize: 12,

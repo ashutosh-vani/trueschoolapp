@@ -79,6 +79,94 @@ class CareerDomain {
   }
 }
 
+// ── Education path step ──────────────────────────────────────────────────
+class EducationStep {
+  final int step;
+  final String title;
+  final String description;
+  final String status; // 'done' | 'current' | 'upcoming'
+
+  const EducationStep({
+    required this.step,
+    required this.title,
+    required this.description,
+    required this.status,
+  });
+
+  factory EducationStep.fromJson(Map<String, dynamic> json) {
+    return EducationStep(
+      step: json['step'] ?? 0,
+      title: json['title'] ?? '',
+      description: json['description'] ?? '',
+      status: json['status'] ?? 'upcoming',
+    );
+  }
+}
+
+// ── Key skill with level & category ─────────────────────────────────────
+class CareerSkill {
+  final String skill;
+  final int level;
+  final String category;
+
+  const CareerSkill({
+    required this.skill,
+    required this.level,
+    required this.category,
+  });
+
+  factory CareerSkill.fromJson(Map<String, dynamic> json) {
+    return CareerSkill(
+      skill: json['skill'] ?? '',
+      level: (json['level'] as num?)?.toInt() ?? 0,
+      category: json['category'] ?? 'Technical',
+    );
+  }
+}
+
+// ── Top college entry ────────────────────────────────────────────────────
+class TopCollege {
+  final String name;
+  final String exam;
+  final String type;
+
+  const TopCollege({
+    required this.name,
+    required this.exam,
+    required this.type,
+  });
+
+  factory TopCollege.fromJson(Map<String, dynamic> json) {
+    return TopCollege(
+      name: json['name'] ?? '',
+      exam: json['exam'] ?? '',
+      type: json['type'] ?? '',
+    );
+  }
+}
+
+// ── Similar career reference ─────────────────────────────────────────────
+class SimilarCareer {
+  final String id;
+  final String title;
+  final int matchPercent;
+
+  const SimilarCareer({
+    required this.id,
+    required this.title,
+    required this.matchPercent,
+  });
+
+  factory SimilarCareer.fromJson(Map<String, dynamic> json) {
+    return SimilarCareer(
+      id: json['id'] ?? json['_id'] ?? '',
+      title: json['title'] ?? '',
+      matchPercent: (json['matchPercent'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+// ── Career ───────────────────────────────────────────────────────────────
 class Career {
   final String id;
   final String domainId;
@@ -88,6 +176,20 @@ class Career {
   final String? education;
   final List<String> skills;
 
+  // Rich detail fields (populated from /career/:domainId/:careerId)
+  final int? matchPercent;
+  final String? avgSalary;
+  final String? growthOutlook;
+  final String? jobOpenings;
+  final String? yearsToQualify;
+  final String? whatTheyDo;
+  final String? domain;
+  final List<String> dayInLife;
+  final List<EducationStep> educationPath;
+  final List<CareerSkill> keySkills;
+  final List<TopCollege> topColleges;
+  final List<SimilarCareer> similarCareers;
+
   const Career({
     required this.id,
     required this.domainId,
@@ -96,17 +198,53 @@ class Career {
     this.salary,
     this.education,
     this.skills = const [],
+    this.matchPercent,
+    this.avgSalary,
+    this.growthOutlook,
+    this.jobOpenings,
+    this.yearsToQualify,
+    this.whatTheyDo,
+    this.domain,
+    this.dayInLife = const [],
+    this.educationPath = const [],
+    this.keySkills = const [],
+    this.topColleges = const [],
+    this.similarCareers = const [],
   });
 
   factory Career.fromJson(Map<String, dynamic> json) {
     return Career(
       id: json['_id'] ?? json['id'] ?? '',
-      domainId: json['domain_id'] ?? '',
+      domainId: json['domain_id'] ?? json['domainId'] ?? '',
       title: json['title'] ?? json['name'] ?? '',
       description: json['description'] ?? '',
       salary: json['salary'],
       education: json['education'],
       skills: (json['skills'] as List<dynamic>?)?.cast<String>() ?? [],
+      matchPercent: (json['matchPercent'] as num?)?.toInt(),
+      avgSalary: json['avgSalary'],
+      growthOutlook: json['growthOutlook'],
+      jobOpenings: json['jobOpenings'],
+      yearsToQualify: json['yearsToQualify'],
+      whatTheyDo: json['whatTheyDo'],
+      domain: json['domain'],
+      dayInLife: (json['dayInLife'] as List<dynamic>?)?.cast<String>() ?? [],
+      educationPath: (json['educationPath'] as List<dynamic>?)
+              ?.map((e) => EducationStep.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      keySkills: (json['keySkills'] as List<dynamic>?)
+              ?.map((e) => CareerSkill.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      topColleges: (json['topColleges'] as List<dynamic>?)
+              ?.map((e) => TopCollege.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      similarCareers: (json['similarCareers'] as List<dynamic>?)
+              ?.map((e) => SimilarCareer.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
     );
   }
 }

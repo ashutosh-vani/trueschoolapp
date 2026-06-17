@@ -3,6 +3,7 @@ import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/homework/data/models/homework_item.dart';
 import 'package:trueschoolapp/features/homework/data/services/homework_service.dart';
 import 'package:trueschoolapp/features/homework/presentation/pages/homework_attempt_page.dart';
+import 'package:trueschoolapp/features/homework/presentation/pages/homework_result_page.dart';
 import 'package:trueschoolapp/features/homework/presentation/widgets/homework_card.dart';
 import 'package:trueschoolapp/features/homework/presentation/widgets/homework_filter_chips.dart';
 import 'package:trueschoolapp/shared/widgets/skeleton.dart';
@@ -20,6 +21,7 @@ class HomeworkPage extends StatefulWidget {
 
 class _HomeworkPageState extends State<HomeworkPage> {
   String _selectedFilter = 'All';
+  String? _selectedSubject;
   String _sortBy = 'Latest';
   List<HomeworkItem> _allHomework = [];
   bool _isLoading = true;
@@ -57,6 +59,11 @@ class _HomeworkPageState extends State<HomeworkPage> {
       filtered = _allHomework.where((hw) => hw.status == filterKey).toList();
     }
 
+    // Subject filter
+    if (_selectedSubject != null) {
+      filtered = filtered.where((hw) => hw.subject == _selectedSubject).toList();
+    }
+
     // Sort
     switch (_sortBy) {
       case 'Due Date':
@@ -77,7 +84,32 @@ class _HomeworkPageState extends State<HomeworkPage> {
     return filtered;
   }
 
+  Map<String, int> get _statusCounts => {
+    'pending':     _allHomework.where((h) => h.status == 'pending').length,
+    'overdue':     _allHomework.where((h) => h.status == 'overdue').length,
+    'in_progress': _allHomework.where((h) => h.status == 'in_progress').length,
+    'completed':   _allHomework.where((h) => h.status == 'completed').length,
+  };
+
+  List<String> get _subjects => _allHomework.map((h) => h.subject).toSet().where((s) => s.isNotEmpty).toList();
+
   void _navigateToAttempt(HomeworkItem homework) {
+    if (homework.status == 'completed') {
+      // Completed homework → show result page with grade info
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => HomeworkResultPage(
+            homeworkId: homework.id,
+            homeworkTitle: homework.title,
+            apiResult: homework.grade != null
+                ? {'final_grade': homework.grade, 'teacher_feedback': homework.teacherFeedback}
+                : null,
+          ),
+        ),
+      );
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -100,7 +132,13 @@ class _HomeworkPageState extends State<HomeworkPage> {
             _buildHeader(),
             const SizedBox(height: 12),
             _buildSortButton(),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+            // Status count cards row
+            if (_isLoading)
+              _buildStatusCardsSkeleton()
+            else
+              _buildStatusCountCards(),
+            const SizedBox(height: 12),
             HomeworkFilterChips(
               filters: _filters,
               selectedFilter: _selectedFilter,
@@ -108,6 +146,11 @@ class _HomeworkPageState extends State<HomeworkPage> {
                 setState(() => _selectedFilter = filter);
               },
             ),
+            // Subject filter
+            if (!_isLoading && _subjects.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _buildSubjectFilter(),
+            ],
             const SizedBox(height: 20),
             Expanded(
               child: _isLoading
@@ -130,45 +173,6 @@ class _HomeworkPageState extends State<HomeworkPage> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: () {
-              if (widget.onBack != null) {
-                widget.onBack!();
-              } else {
-                Navigator.maybePop(context);
-              }
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.arrow_back, size: 16, color: AppColors.textPrimary),
-                  SizedBox(width: 4),
-                  Text(
-                    'Home',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
           const Text(
             'Your Homework',
             style: TextStyle(
@@ -177,6 +181,20 @@ class _HomeworkPageState extends State<HomeworkPage> {
               color: AppColors.textPrimary,
             ),
           ),
+          const Spacer(),
+          // Result count badge
+          if (!_isLoading && (_selectedFilter != 'All' || _selectedSubject != null))
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                '${_filteredHomework.length} result${_filteredHomework.length != 1 ? "s" : ""}',
+                style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600),
+              ),
+            ),
         ],
       ),
     );
@@ -269,6 +287,116 @@ class _HomeworkPageState extends State<HomeworkPage> {
     );
   }
 
+  // ── Status count cards (mirrors web sidebar) ─────────────────────
+  Widget _buildStatusCountCards() {
+    final counts = _statusCounts;
+    final cards = [
+      {'key': 'pending',     'label': 'Pending',     'count': counts['pending']!,     'bg': const Color(0xFFFFE5E5),  'textColor': const Color(0xFFB91C1C),  'icon': Icons.assignment_late_outlined},
+      {'key': 'overdue',     'label': 'Overdue',     'count': counts['overdue']!,     'bg': const Color(0xFFFFB3BA),  'textColor': const Color(0xFF9A3412),  'icon': Icons.history_outlined},
+      {'key': 'in_progress', 'label': 'In Progress', 'count': counts['in_progress']!, 'bg': const Color(0xFFD4C5F9),  'textColor': const Color(0xFF3730A3),  'icon': Icons.pending_actions_outlined},
+      {'key': 'completed',   'label': 'Done',        'count': counts['completed']!,   'bg': const Color(0xFFC8E6C9),  'textColor': const Color(0xFF166534),  'icon': Icons.check_circle_outline},
+    ];
+
+    return SizedBox(
+      height: 76,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: cards.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (context, i) {
+          final card = cards[i];
+          final key = card['key'] as String;
+          final isActive = _selectedFilter.toLowerCase().replaceAll(' ', '_') == key;
+          return GestureDetector(
+            onTap: () => setState(() {
+              final label = {'pending': 'Pending', 'overdue': 'Overdue', 'in_progress': 'In Progress', 'completed': 'Completed'}[key]!;
+              _selectedFilter = isActive ? 'All' : label;
+            }),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: card['bg'] as Color,
+                borderRadius: BorderRadius.circular(14),
+                border: isActive ? Border.all(color: AppColors.primary, width: 2) : null,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 34, height: 34,
+                    decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(17)),
+                    child: Icon(card['icon'] as IconData, size: 18, color: card['textColor'] as Color),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(card['label'] as String, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: card['textColor'] as Color)),
+                      Text('${card['count']}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStatusCardsSkeleton() {
+    return SizedBox(
+      height: 76,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: 4,
+        separatorBuilder: (_, __) => const SizedBox(width: 10),
+        itemBuilder: (_, __) => Container(
+          width: 110, height: 76,
+          decoration: BoxDecoration(color: Colors.grey.shade200, borderRadius: BorderRadius.circular(14)),
+        ),
+      ),
+    );
+  }
+
+  // ── Subject filter chips ──────────────────────────────────────────
+  Widget _buildSubjectFilter() {
+    final subjects = _subjects;
+    return SizedBox(
+      height: 34,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: subjects.length + 1, // +1 for "All Subjects"
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final subject = i == 0 ? null : subjects[i - 1];
+          final label = subject ?? 'All Subjects';
+          final isSelected = _selectedSubject == subject;
+          return GestureDetector(
+            onTap: () => setState(() => _selectedSubject = isSelected ? null : subject),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: isSelected ? AppColors.primary.withValues(alpha: 0.1) : Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: isSelected ? AppColors.primary : AppColors.border, width: isSelected ? 1.5 : 1),
+              ),
+              child: Text(
+                label,
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: isSelected ? AppColors.primary : AppColors.textSecondary),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildHomeworkList() {
     final homework = _filteredHomework;
 
@@ -311,6 +439,8 @@ class _HomeworkPageState extends State<HomeworkPage> {
               difficulty: _capitalize(hw.difficultyLevel),
               estimatedTime: 'Est. Remaining: ${hw.estimatedDurationMinutes} mins',
               progress: hw.progressPercent / 100.0,
+              grade: hw.grade,
+              teacherFeedback: hw.teacherFeedback,
               onTap: () => _navigateToAttempt(hw),
             ),
           );

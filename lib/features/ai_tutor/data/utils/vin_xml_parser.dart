@@ -1,4 +1,4 @@
-// Incremental XML parser for Vin AI streaming responses.
+// Incremental XML parser for TrueSchoolAI streaming responses.
 // Mirrors the logic in web/schoolai/frontend/src/utils/xmlParser.js
 class VinXmlParser {
   /// Parse an (possibly incomplete) XML buffer into a [VinResponse].

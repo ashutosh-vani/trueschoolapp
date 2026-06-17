@@ -4,6 +4,9 @@ import 'package:http/http.dart' as http;
 import 'package:trueschoolapp/config/app_config.dart';
 import 'package:trueschoolapp/features/auth/data/services/token_storage.dart';
 import 'package:trueschoolapp/features/exam_prep/data/models/exam_prep_model.dart';
+// re-export detail models used by the service
+export 'package:trueschoolapp/features/exam_prep/data/models/exam_prep_model.dart'
+    show DayPlan, DayPlanTask, SubjectNotes, SubjectPractice;
 
 class ExamPrepService {
   static final String _baseUrl = AppConfig.apiUrl;
@@ -99,24 +102,7 @@ class ExamPrepService {
         }
       }
 
-      // Fallback: match web frontend behavior — always show content
-      // The web ExamPrep.jsx falls back to EXAM_DATA when API returns empty
-      if (plans.isEmpty) {
-        plans = [
-          ExamPrepPlan(
-            id: 'fallback_plan',
-            studentClass: 'Class 6',
-            board: 'ICSE',
-            subjects: ['Mathematics', 'Physics', 'Chemistry'],
-            dailyStudyTime: '',
-            status: 'active',
-            createdAt: '',
-            daysLeft: 9,
-            progressPercent: 62,
-          ),
-        ];
-      }
-
+      // Return whatever the API gave us — empty list is valid (list page shows empty state)
       debugPrint('[ExamPrepService] final plans count: ${plans.length}');
       return plans;
     } catch (e, st) {
@@ -320,6 +306,83 @@ class ExamPrepService {
       return response.statusCode == 200;
     } catch (e) {
       debugPrint('[ExamPrepService] toggleMode error: $e');
+      return false;
+    }
+  }
+
+  /// GET /exam-prep/{id}/full-plan — day-by-day study plan
+  static Future<List<DayPlan>> getFullPlan(String id) async {
+    try {
+      final headers = await _authHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/exam-prep/$id/full-plan'),
+        headers: headers,
+      );
+      debugPrint('[ExamPrepService] GET /exam-prep/$id/full-plan → ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((d) => DayPlan.fromJson(d as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('[ExamPrepService] getFullPlan error: $e');
+      return [];
+    }
+  }
+
+  /// GET /exam-prep/{id}/notes — per-subject notes
+  static Future<List<SubjectNotes>> getNotes(String id) async {
+    try {
+      final headers = await _authHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/exam-prep/$id/notes'),
+        headers: headers,
+      );
+      debugPrint('[ExamPrepService] GET /exam-prep/$id/notes → ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((d) => SubjectNotes.fromJson(d as Map<String, dynamic>)).toList();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('[ExamPrepService] getNotes error: $e');
+      return [];
+    }
+  }
+
+  /// GET /exam-prep/{id}/practice — per-subject practice sets
+  static Future<List<SubjectPractice>> getPractice(String id) async {
+    try {
+      final headers = await _authHeaders();
+      final response = await http.get(
+        Uri.parse('$_baseUrl/exam-prep/$id/practice'),
+        headers: headers,
+      );
+      debugPrint('[ExamPrepService] GET /exam-prep/$id/practice → ${response.statusCode}');
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data
+            .map((d) => SubjectPractice.fromJson(d as Map<String, dynamic>))
+            .toList();
+      }
+      return [];
+    } catch (e) {
+      debugPrint('[ExamPrepService] getPractice error: $e');
+      return [];
+    }
+  }
+
+  /// PATCH /exam-prep/{planId}/full-plan/tasks/{taskId}/toggle
+  static Future<bool> toggleFullPlanTask(String planId, String taskId) async {
+    try {
+      final headers = await _authHeaders();
+      final response = await http.patch(
+        Uri.parse('$_baseUrl/exam-prep/$planId/full-plan/tasks/$taskId/toggle'),
+        headers: headers,
+      );
+      return response.statusCode == 200;
+    } catch (e) {
+      debugPrint('[ExamPrepService] toggleFullPlanTask error: $e');
       return false;
     }
   }

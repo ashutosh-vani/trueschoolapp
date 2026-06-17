@@ -161,28 +161,70 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Widget _buildTopBar(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         children: [
-          // Back arrow
-          GestureDetector(
-            onTap: () {
-              if (widget.onBack != null) {
-                widget.onBack!();
-              } else {
-                Navigator.maybePop(context);
-              }
-            },
-            child: const Icon(Icons.arrow_back,
-                size: 22, color: AppColors.textPrimary),
+          // Logo icon
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.menu_book_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 10),
+          const Text(
+            'My Portfolio',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
           ),
 
-          const SizedBox(width: 10),
+          const Spacer(),
 
-          // Book icon pill — "My Portfolio"
+          // Edit Profile
+          GestureDetector(
+            onTap: _openEditProfile,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.15)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.edit_outlined,
+                      size: 15, color: AppColors.primary),
+                  SizedBox(width: 4),
+                  Text(
+                    'Edit Profile',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Share Portfolio
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
             decoration: BoxDecoration(
               color: AppColors.primary,
               borderRadius: BorderRadius.circular(10),
@@ -190,66 +232,14 @@ class _ProfilePageState extends State<ProfilePage> {
             child: const Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.menu_book_rounded,
-                    size: 16, color: Colors.white),
-                SizedBox(width: 6),
-                Text(
-                  'My Portfolio',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 12),
-
-          // Edit Profile
-          GestureDetector(
-            onTap: _openEditProfile,
-            child: const Row(
-              children: [
-                Icon(Icons.edit_outlined,
-                    size: 15, color: AppColors.textPrimary),
+                Icon(Icons.share_rounded, size: 15, color: Colors.white),
                 SizedBox(width: 4),
                 Text(
-                  'Edit\nProfile',
+                  'Share',
                   style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                    height: 1.25,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Spacer(),
-
-          // Share Portfolio pill
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(
-              color: AppColors.primary,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.share_rounded, size: 14, color: Colors.white),
-                SizedBox(width: 6),
-                Text(
-                  'Share\nPortfolio',
-                  style: TextStyle(
-                    fontSize: 11,
+                    fontSize: 12,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
-                    height: 1.25,
                   ),
                 ),
               ],

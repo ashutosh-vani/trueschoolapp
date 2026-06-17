@@ -54,7 +54,8 @@ class CareerService {
   }
 
   /// GET /career/{domain_id}/{career_id}
-  static Future<Career?> getCareerDetail(String domainId, String careerId) async {
+  static Future<Career?> getCareerDetail(
+      String domainId, String careerId) async {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
@@ -65,7 +66,7 @@ class CareerService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data != null) {
-          return Career.fromJson(data);
+          return Career.fromJson(data as Map<String, dynamic>);
         }
       }
       return null;
