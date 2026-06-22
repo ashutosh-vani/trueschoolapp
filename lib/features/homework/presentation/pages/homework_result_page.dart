@@ -235,7 +235,7 @@ class HomeworkResultPage extends StatelessWidget {
     );
   }
 
-  // ── TrueSchoolAI feedback panel ────────────────────────────────────────
+  // ── Lumi feedback panel ────────────────────────────────────────────────
   Widget _buildVinFeedback(int scorePct, int mcqCorrect, int mcqTotal) {
     final msg = scorePct >= 80
         ? 'Great work on the MCQ section! You correctly answered $mcqCorrect out of $mcqTotal objective questions.'
@@ -263,7 +263,7 @@ class HomeworkResultPage extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('TrueSchoolAI Feedback', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                const Text('Lumi Feedback', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
                 const SizedBox(height: 6),
                 Text(msg, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.5)),
                 const SizedBox(height: 8),

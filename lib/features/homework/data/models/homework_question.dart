@@ -46,8 +46,8 @@ class HomeworkQuestion {
   factory HomeworkQuestion.fromJson(Map<String, dynamic> json) {
     return HomeworkQuestion(
       id: json['id'] ?? '',
-      questionNumber: json['question_number'] ?? 1,
-      totalQuestions: json['total_questions'] ?? 1,
+      questionNumber: (json['question_number'] as num?)?.toInt() ?? 1,
+      totalQuestions: (json['total_questions'] as num?)?.toInt() ?? 1,
       questionText: json['question_text'] ?? '',
       answerType: json['answer_type'] ?? 'mcq',
       options: (json['options'] as List<dynamic>?)
@@ -56,7 +56,7 @@ class HomeworkQuestion {
           [],
       hint: json['hint'],
       vinNudge: json['vin_nudge'],
-      maxPoints: json['max_points'] ?? 1,
+      maxPoints: (json['max_points'] as num?)?.toInt() ?? 1,
       sampleAnswer: json['sample_answer'],
     );
   }

@@ -405,7 +405,7 @@ class _LearningGapsPageState extends State<LearningGapsPage> {
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
           const SizedBox(height: 6),
           const Text(
-            'Vin can analyze all your current gaps and create a 7-day schedule to get you back on track.',
+            'Lumi can analyze all your current gaps and create a 7-day schedule to get you back on track.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
@@ -418,7 +418,7 @@ class _LearningGapsPageState extends State<LearningGapsPage> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
-            child: const Text('Talk to Vin Assistant', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text('Talk to Lumi Assistant', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -526,7 +526,7 @@ class _GapCard extends StatelessWidget {
                     padding: const EdgeInsets.only(right: 8),
                     child: _CorrBtn(icon: _iconForPath(cp.icon), label: cp.label),
                   )),
-              _CorrBtn(icon: Icons.smart_toy, label: 'Ask Vin', isVin: true),
+              _CorrBtn(icon: Icons.smart_toy, label: 'Ask Lumi', isVin: true),
               const Spacer(),
               ElevatedButton(
                 onPressed: onFix,

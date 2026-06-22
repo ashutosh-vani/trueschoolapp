@@ -33,6 +33,10 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
   String? _errorMessage;
   final ImagePicker _imagePicker = ImagePicker();
 
+  String _submissionType = 'online_quiz';
+  String? _instructions;
+  String? _description;
+
   @override
   void initState() {
     super.initState();
@@ -55,15 +59,37 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
   }
 
   Future<void> _loadQuestions() async {
-    final questions = await HomeworkService.getQuestions(widget.homeworkId);
-    if (mounted) {
-      setState(() {
-        _questions = questions;
-        _isLoading = false;
-        if (questions.isEmpty) {
-          _errorMessage = 'No questions found for this homework.';
-        }
-      });
+    try {
+      final results = await Future.wait([
+        HomeworkService.getHomeworkDetail(widget.homeworkId),
+        HomeworkService.getQuestions(widget.homeworkId),
+      ]);
+
+      final detail = results[0] as Map<String, dynamic>?;
+      final questions = results[1] as List<HomeworkQuestion>;
+
+      if (mounted) {
+        setState(() {
+          _questions = questions;
+          _isLoading = false;
+          if (detail != null) {
+            _submissionType = detail['submission_type'] ?? detail['submissionType'] ?? 'online_quiz';
+            _instructions = detail['instructions'];
+            _description = detail['description'];
+          }
+          if (_submissionType == 'online_quiz' && questions.isEmpty) {
+            _errorMessage = 'No questions found for this homework.';
+          }
+        });
+      }
+    } catch (e, stack) {
+      debugPrint('[HomeworkAttemptPage] _loadQuestions error: $e\n$stack');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Failed to load homework: $e';
+        });
+      }
     }
   }
 
@@ -173,8 +199,9 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Save & Exit?'),
         content: Text(
-          'You have answered $answeredCount of ${_questions.length} questions. '
-          'Your progress will not be saved if you exit now.',
+          _submissionType == 'file_upload' || _submissionType == 'handwritten'
+              ? 'Are you sure you want to exit? Your progress will not be saved.'
+              : 'You have answered $answeredCount of ${_questions.length} questions. Your progress will not be saved if you exit now.',
         ),
         actions: [
           TextButton(
@@ -194,6 +221,362 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
     );
   }
 
+  Future<void> _pickHomeworkImage(ImageSource source) async {
+    try {
+      final XFile? picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
+      if (picked != null && mounted) {
+        setState(() {
+          _uploadFiles['homework_file'] = picked;
+          _answers['homework_file'] = picked.path;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not pick image: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _pickHomeworkFile() async {
+    await _pickHomeworkImage(ImageSource.gallery);
+  }
+
+  Future<void> _submitSingleFileHomework() async {
+    final pickedFile = _uploadFiles['homework_file'];
+    if (pickedFile == null) return;
+
+    setState(() => _isSubmitting = true);
+
+    final String? uploadedUrl = await HomeworkService.uploadFile(File(pickedFile.path));
+    if (uploadedUrl == null) {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('File upload failed. Please try again.'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    final result = await HomeworkService.submitHomework(
+      homeworkId: widget.homeworkId,
+      answers: [],
+      submissionFileUrl: uploadedUrl,
+    );
+
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => HomeworkResultPage(
+            homeworkId: widget.homeworkId,
+            homeworkTitle: widget.title,
+            apiResult: result,
+            fileSubmission: true,
+            answers: {'homework_file': pickedFile.path},
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildSingleFileUploadLayout() {
+    final isHandwritten = _submissionType == 'handwritten';
+    final label = isHandwritten ? 'Handwritten Answer' : 'File Upload';
+    final pickedFile = _uploadFiles['homework_file'];
+    final instructionsText = _instructions ?? _description ?? widget.title;
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6F6F8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primary.withValues(alpha: 0.7),
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Submit Your Work',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isHandwritten
+                          ? 'Take a clear photo of your handwritten work and upload it.'
+                          : 'Upload your completed work as a PDF or image file.',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.assignment_outlined, size: 18, color: AppColors.primary),
+                              SizedBox(width: 8),
+                              Text(
+                                'Instructions',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            instructionsText,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                              height: 1.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+
+                    if (pickedFile == null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 24),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: Colors.grey.shade300,
+                            width: 2,
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Icon(Icons.add_a_photo_outlined, size: 26, color: AppColors.primary),
+                                ),
+                                const SizedBox(width: 16),
+                                Container(
+                                  width: 56,
+                                  height: 56,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Icon(Icons.collections_outlined, size: 26, color: AppColors.primary),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 20),
+                            const Text(
+                              'Select a photo or document',
+                              style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textPrimary),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Take a photo or browse files from your device gallery',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade500,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: () => _pickHomeworkImage(ImageSource.camera),
+                                icon: const Icon(Icons.photo_camera_outlined, size: 20, color: Colors.white),
+                                label: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: _pickHomeworkFile,
+                                icon: const Icon(Icons.file_upload_outlined, size: 20),
+                                label: const Text('Browse Files', style: TextStyle(fontWeight: FontWeight.bold)),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: AppColors.primary,
+                                  side: BorderSide(color: AppColors.primary.withValues(alpha: 0.3)),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'ACCEPTED: JPG, PNG, PDF · MAX 20MB',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade400,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ] else ...[
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.green.shade300, width: 2),
+                          borderRadius: BorderRadius.circular(16),
+                          color: Colors.green.shade50,
+                        ),
+                        child: Column(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(12),
+                              child: Image.file(
+                                File(pickedFile.path),
+                                height: 200,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => const Icon(
+                                  Icons.insert_drive_file_outlined,
+                                  size: 64,
+                                  color: Colors.green,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    pickedFile.name,
+                                    style: const TextStyle(fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            TextButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _uploadFiles.remove('homework_file');
+                                  _answers.remove('homework_file');
+                                });
+                              },
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              label: const Text('Remove & re-upload', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 40),
+                  ],
+                ),
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -3),
+                  ),
+                ],
+              ),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: (pickedFile == null || _isSubmitting)
+                      ? null
+                      : _submitSingleFileHomework,
+                  icon: _isSubmitting 
+                      ? const SizedBox.shrink() 
+                      : const Icon(Icons.send, color: Colors.white, size: 20),
+                  label: _isSubmitting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Submit Homework', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 15)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -203,7 +586,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
       );
     }
 
-    if (_errorMessage != null || _questions.isEmpty) {
+    if (_errorMessage != null) {
       return Scaffold(
         backgroundColor: const Color(0xFFF6F6F8),
         body: Center(
@@ -229,6 +612,10 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
           ),
         ),
       );
+    }
+
+    if (_submissionType == 'file_upload' || _submissionType == 'handwritten') {
+      return _buildSingleFileUploadLayout();
     }
 
     final question = _questions[_currentIndex];
@@ -311,12 +698,12 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
             ),
           ),
           _buildHeaderPill(
-            label: 'Ask\nVin',
+            label: 'Ask\nLumi',
             filled: true,
             icon: Icons.smart_toy_outlined,
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('TrueSchoolAI coming soon!')),
+                const SnackBar(content: Text('Lumi coming soon!')),
               );
             },
           ),
@@ -681,7 +1068,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
               });
             },
             decoration: InputDecoration(
-              hintText: "Let's work through this...\nStart typing your thoughts and Vin will help refine them.",
+              hintText: "Let's work through this...\nStart typing your thoughts and Lumi will help refine them.",
               hintStyle: TextStyle(color: Colors.grey.shade400, height: 1.5),
               border: InputBorder.none,
               contentPadding: const EdgeInsets.all(16),
@@ -948,9 +1335,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
       canProceed = currentAnswer != null;
     }
 
-    final String buttonLabel = isLast
-        ? (isTyped || isUpload ? 'Submit All' : 'Submit\nAnswer')
-        : (isTyped ? 'Next' : isUpload ? 'Next' : 'Submit\nAnswer');
+    final String buttonLabel = isLast ? 'Submit All' : 'Next';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),

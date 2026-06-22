@@ -554,7 +554,7 @@ class _GapRemediationPageState extends State<GapRemediationPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Submitted! Vin is reviewing your answer.',
+                      Text('Submitted! Lumi is reviewing your answer.',
                           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green.shade800)),
                       const SizedBox(height: 4),
                       Text(gap.aiLastFeedback,

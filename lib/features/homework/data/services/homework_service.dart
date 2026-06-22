@@ -70,6 +70,7 @@ class HomeworkService {
         headers: headers,
       );
 
+      debugPrint('[HomeworkService] GET /homework/$homeworkId/questions → ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         return data
@@ -77,7 +78,8 @@ class HomeworkService {
             .toList();
       }
       return [];
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[HomeworkService] getQuestions error: $e\n$stack');
       return [];
     }
   }
@@ -113,23 +115,31 @@ class HomeworkService {
   static Future<Map<String, dynamic>?> submitHomework({
     required String homeworkId,
     required List<Map<String, dynamic>> answers,
+    String? submissionFileUrl,
   }) async {
     try {
       final headers = await _authHeaders();
+      final bodyMap = {
+        'homework_id': homeworkId,
+        'answers': answers,
+      };
+      if (submissionFileUrl != null) {
+        bodyMap['submission_file_url'] = submissionFileUrl;
+      }
+
       final response = await http.post(
         Uri.parse('$_baseUrl/homework/submit'),
         headers: headers,
-        body: jsonEncode({
-          'homework_id': homeworkId,
-          'answers': answers,
-        }),
+        body: jsonEncode(bodyMap),
       );
 
+      debugPrint('[HomeworkService] POST /homework/submit → ${response.statusCode}');
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as Map<String, dynamic>;
       }
       return null;
-    } catch (e) {
+    } catch (e, stack) {
+      debugPrint('[HomeworkService] submitHomework error: $e\n$stack');
       return null;
     }
   }

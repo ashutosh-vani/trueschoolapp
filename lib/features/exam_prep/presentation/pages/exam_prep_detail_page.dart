@@ -4,6 +4,12 @@ import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/exam_prep/data/models/exam_prep_model.dart';
 import 'package:trueschoolapp/features/exam_prep/data/services/exam_prep_service.dart';
 import 'package:trueschoolapp/features/exam_prep/presentation/pages/create_exam_prep_page.dart';
+import 'package:trueschoolapp/features/learning_gaps/data/models/learning_gap_model.dart';
+import 'package:trueschoolapp/features/learning_gaps/data/services/learning_gap_service.dart';
+import 'package:trueschoolapp/features/learning_gaps/data/learning_gap_fallback.dart';
+import 'package:trueschoolapp/features/learning_gaps/presentation/pages/gap_remediation_page.dart';
+import 'package:trueschoolapp/features/learning_gaps/presentation/pages/gap_quiz_page.dart';
+import 'package:trueschoolapp/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
 
 // ── Fallback data (mirrors web EXAM_DATA) ─────────────────────────────────────
 final _fallbackDetail = _DetailState(
@@ -79,6 +85,63 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
   late _DetailState _data;
   bool _isLastDayMode = false;
 
+  List<LearningGap> _allGaps = [];
+  List<Quiz> _allQuizzes = [];
+
+  void _openNotes(String subject) {
+    LearningGap? targetGap;
+
+    // 1. Try real API gaps
+    targetGap = _allGaps.where((g) => g.subject.toLowerCase() == subject.toLowerCase() || 
+                                     (subject.toLowerCase().startsWith('math') && g.subject.toLowerCase().startsWith('math'))).firstOrNull;
+
+    // 2. Try fallback gaps
+    targetGap ??= kFallbackGaps.where((g) => g.subject.toLowerCase() == subject.toLowerCase() ||
+                                            (subject.toLowerCase().startsWith('math') && g.subject.toLowerCase().startsWith('math'))).firstOrNull;
+
+    // 3. Fallback to first gap
+    targetGap ??= _allGaps.firstOrNull ?? (kFallbackGaps.isNotEmpty ? kFallbackGaps.first : null);
+
+    if (targetGap != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => GapRemediationPage(gap: targetGap!),
+        ),
+      );
+    }
+  }
+
+  void _openPractice(String subject) {
+    String? targetQuizId;
+
+    // 1. Try real API quizzes
+    final apiQuiz = _allQuizzes.where((q) => q.subject.toLowerCase() == subject.toLowerCase() ||
+                                            (subject.toLowerCase().startsWith('math') && q.subject.toLowerCase().startsWith('math'))).firstOrNull;
+    if (apiQuiz != null) {
+      targetQuizId = apiQuiz.id;
+    }
+
+    // 2. Try fallback quizzes
+    if (targetQuizId == null) {
+      final fbQuiz = kFallbackQuizzes.where((q) => q.subject.toLowerCase() == subject.toLowerCase() ||
+                                                  (subject.toLowerCase().startsWith('math') && q.subject.toLowerCase().startsWith('math'))).firstOrNull;
+      if (fbQuiz != null) {
+        targetQuizId = fbQuiz.id;
+      }
+    }
+
+    // 3. Default fallback
+    targetQuizId ??= _allQuizzes.firstOrNull?.id ?? 'quiz001';
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => GapQuizPage(quizId: targetQuizId!),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -103,14 +166,21 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
         ExamPrepService.getFullPlan(widget.planId),
         ExamPrepService.getNotes(widget.planId),
         ExamPrepService.getPractice(widget.planId),
+        LearningGapService.getLearningGaps(),
+        LearningGapService.getQuizList(),
       ]);
 
       final detail = results[0] as ExamPrepDetail?;
       final fullPlanRaw = results[1] as List<DayPlan>;
       final notesRaw = results[2] as List<SubjectNotes>;
       final practiceRaw = results[3] as List<SubjectPractice>;
+      final gapsRaw = results[4] as List<LearningGap>;
+      final quizzesRaw = results[5] as List<Quiz>;
 
       if (!mounted) return;
+
+      _allGaps = gapsRaw;
+      _allQuizzes = quizzesRaw;
 
       if (detail != null) {
         // Build from real API data
@@ -505,7 +575,7 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
           // Upcoming Exams
           _buildUpcomingExams(),
           const SizedBox(height: 12),
-          // Ask Vin CTA
+          // Ask Lumi CTA
           _buildAskVinCard(),
           const SizedBox(height: 24),
         ],
@@ -924,11 +994,17 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
             ),
           ),
           const SizedBox(width: 8),
-          Icon(Icons.quiz_outlined,
-              size: 16, color: Colors.grey.shade400),
+          GestureDetector(
+            onTap: () => _openPractice(task.subject),
+            child: const Icon(Icons.quiz_outlined,
+                size: 16, color: AppColors.primary),
+          ),
           const SizedBox(width: 6),
-          Icon(Icons.menu_book_outlined,
-              size: 16, color: Colors.grey.shade400),
+          GestureDetector(
+            onTap: () => _openNotes(task.subject),
+            child: const Icon(Icons.menu_book_outlined,
+                size: 16, color: AppColors.primary),
+          ),
         ],
       ),
     );
@@ -1196,7 +1272,7 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
     }
   }
 
-  // ── Ask Vin CTA ───────────────────────────────────────────────────────────
+  // ── Ask Lumi CTA ──────────────────────────────────────────────────────────
 
   Widget _buildAskVinCard() {
     return Container(
@@ -1225,7 +1301,7 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Ask Vin to quiz you or explain a concept.',
+                  'Ask Lumi to quiz you or explain a concept.',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white70,
@@ -1237,7 +1313,12 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
           ),
           const SizedBox(width: 12),
           TextButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AiTutorPage()),
+              );
+            },
             style: TextButton.styleFrom(
               backgroundColor: Colors.white,
               foregroundColor: AppColors.primary,
@@ -1247,7 +1328,7 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             ),
             child: const Text(
-              'Ask Vin',
+              'Ask Lumi',
               style:
                   TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
             ),
@@ -1504,9 +1585,7 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
 
   Widget _buildNotesCard(_NotesData notes) {
     return GestureDetector(
-      onTap: () {
-        // Future: navigate to notes viewer
-      },
+      onTap: () => _openNotes(notes.subject),
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
@@ -1599,9 +1678,7 @@ class _ExamPrepDetailPageState extends State<ExamPrepDetailPage>
 
   Widget _buildPracticeCard(_PracticeData practice) {
     return GestureDetector(
-      onTap: () {
-        // Future: navigate to practice session
-      },
+      onTap: () => _openPractice(practice.subject),
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(

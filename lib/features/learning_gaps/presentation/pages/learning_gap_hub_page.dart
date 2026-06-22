@@ -245,7 +245,7 @@ class _LearningGapHubPageState extends State<LearningGapHubPage> {
             Icon(Icons.auto_awesome, size: 16, color: AppColors.primary.withValues(alpha: 0.5)),
             const SizedBox(width: 6),
             Text(
-              'POWERED BY TRUESCHOOLAI',
+              'POWERED BY LUMI',
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,

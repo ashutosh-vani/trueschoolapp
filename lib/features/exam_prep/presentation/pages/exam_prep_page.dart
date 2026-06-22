@@ -422,7 +422,7 @@ class _ExamPrepPageState extends State<ExamPrepPage> {
     );
   }
 
-  // ── Ask Vin CTA ──────────────────────────────────────────────────────────────
+  // ── Ask Lumi CTA ─────────────────────────────────────────────────────────────
   Widget _buildAskVinCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -443,7 +443,7 @@ class _ExamPrepPageState extends State<ExamPrepPage> {
                 Text('Need help with revision?',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
                 SizedBox(height: 4),
-                Text('Ask Vin to quiz you on any topic or explain a concept.',
+                Text('Ask Lumi to quiz you on any topic or explain a concept.',
                     style: TextStyle(fontSize: 12, color: Colors.white70, height: 1.4)),
               ],
             ),
@@ -457,7 +457,7 @@ class _ExamPrepPageState extends State<ExamPrepPage> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
-            child: const Text('Ask Vin', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            child: const Text('Ask Lumi', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ),
         ],
       ),

@@ -3,6 +3,7 @@ import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/exam_prep/data/models/exam_prep_model.dart';
 import 'package:trueschoolapp/features/exam_prep/data/services/exam_prep_service.dart';
 import 'package:trueschoolapp/features/exam_prep/data/services/local_exam_prep_storage.dart';
+import 'package:trueschoolapp/features/learning_gaps/presentation/pages/gap_quiz_page.dart';
 
 class CreateExamPrepPage extends StatefulWidget {
   const CreateExamPrepPage({super.key});
@@ -149,8 +150,17 @@ class _CreateExamPrepPageState extends State<CreateExamPrepPage> {
     if (!mounted) return;
     setState(() => _isSubmitting = false);
 
-    // Pop back to exam prep page — it will reload and show the new plan
-    Navigator.pop(context, true);
+    if (_startQuiz == true) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const GapQuizPage(quizId: 'quiz001'),
+        ),
+      );
+    } else {
+      // Pop back to exam prep page — it will reload and show the new plan
+      Navigator.pop(context, true);
+    }
   }
 
   @override

@@ -332,7 +332,7 @@ class _LearningGapsListPageState extends State<LearningGapsListPage> {
               style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
           const SizedBox(height: 8),
           const Text(
-              'Vin can analyze all your current gaps and create a 7-day schedule to get you back on track.',
+              'Lumi can analyze all your current gaps and create a 7-day schedule to get you back on track.',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5)),
           const SizedBox(height: 16),
@@ -511,8 +511,8 @@ class _GapCard extends StatelessWidget {
                 _kOrange.withValues(alpha: 0.05), whatWentWrong, _kOrange),
             const SizedBox(height: 10),
 
-            // Vin's Coaching Note
-            _infoBox(Icons.smart_toy_outlined, AppColors.primary, "VIN'S COACHING NOTE",
+            // Lumi's Coaching Note
+            _infoBox(Icons.smart_toy_outlined, AppColors.primary, "LUMI'S COACHING NOTE",
                 AppColors.primary.withValues(alpha: 0.05), coachingNote, AppColors.textPrimary),
             const SizedBox(height: 16),
 

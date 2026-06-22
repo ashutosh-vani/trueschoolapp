@@ -73,6 +73,18 @@ class _GapQuizPageState extends State<GapQuizPage> {
     }
   }
 
+  void _handleNextWithoutChecking() {
+    if (_selected == null) return;
+    final q = _quiz!.questions[_currentIdx];
+    final correct = q.options.firstWhere((o) => o.isCorrect, orElse: () => q.options.first);
+    final isRight = _selected == correct.id;
+    setState(() {
+      if (isRight) _score++;
+      _allAnswers.add({'question_id': q.id, 'selected_option_id': _selected!});
+    });
+    _handleNext();
+  }
+
   void _restart() {
     setState(() {
       _currentIdx = 0;
@@ -461,21 +473,37 @@ class _GapQuizPageState extends State<GapQuizPage> {
               ],
             ),
             const Spacer(),
-            if (!_checked)
-              ElevatedButton.icon(
+            if (!_checked) ...[
+              OutlinedButton.icon(
                 onPressed: _selected == null ? null : _handleCheck,
                 icon: const Icon(Icons.check, size: 16),
                 label: const Text('Check Answer'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: BorderSide(
+                    color: _selected == null
+                        ? AppColors.primary.withValues(alpha: 0.4)
+                        : AppColors.primary,
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _selected == null ? null : _handleNextWithoutChecking,
+                icon: const Icon(Icons.arrow_forward, size: 16),
+                label: Text(_currentIdx < _quiz!.questions.length - 1 ? 'Next' : 'Finish'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   elevation: 0,
                   disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
                 ),
-              )
-            else
+              ),
+            ] else
               ElevatedButton.icon(
                 onPressed: _handleNext,
                 icon: const Icon(Icons.arrow_forward, size: 16),

@@ -788,7 +788,7 @@ class _AiTutorPageState extends State<AiTutorPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('TrueSchoolAI',
+                const Text('Lumi',
                     style: TextStyle(
                         fontSize: 10,
                         color: Color(0xFF6B7280),

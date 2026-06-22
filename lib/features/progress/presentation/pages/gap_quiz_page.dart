@@ -88,6 +88,19 @@ class _GapQuizPageState extends State<GapQuizPage> {
     }
   }
 
+  Future<void> _nextWithoutChecking() async {
+    if (_selectedOptionId == null) return;
+    final isRight = _selectedOptionId == _correctOption?.id;
+    setState(() {
+      if (isRight) _score++;
+    });
+    _allAnswers.add(QuizAnswer(
+      questionId: _currentQuestion.id,
+      selectedOptionId: _selectedOptionId!,
+    ));
+    await _next();
+  }
+
   void _retry() {
     setState(() {
       _currentIdx = 0;
@@ -652,33 +665,76 @@ class _GapQuizPageState extends State<GapQuizPage> {
               ],
             ),
             const Spacer(),
-            if (!_checked)
-              // Check Answer button
+            if (!_checked) ...[
+              SizedBox(
+                height: 46,
+                child: OutlinedButton.icon(
+                  onPressed: _selectedOptionId != null ? _checkAnswer : null,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: BorderSide(
+                      color: _selectedOptionId == null
+                          ? AppColors.primary.withValues(alpha: 0.4)
+                          : AppColors.primary,
+                      width: 1.5,
+                    ),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                  ),
+                  icon: Icon(
+                    Icons.check,
+                    color: _selectedOptionId == null
+                        ? AppColors.primary.withValues(alpha: 0.4)
+                        : AppColors.primary,
+                    size: 18,
+                  ),
+                  label: Text(
+                    'Check Answer',
+                    style: TextStyle(
+                      color: _selectedOptionId == null
+                          ? AppColors.primary.withValues(alpha: 0.4)
+                          : AppColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
               SizedBox(
                 height: 46,
                 child: ElevatedButton.icon(
-                  onPressed:
-                      _selectedOptionId != null ? _checkAnswer : null,
+                  onPressed: _selectedOptionId != null && !_submitting
+                      ? _nextWithoutChecking
+                      : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
-                    disabledBackgroundColor: AppColors.border,
+                    disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.4),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
-                  icon: const Icon(Icons.check, color: Colors.white, size: 18),
-                  label: const Text(
-                    'Check Answer',
-                    style: TextStyle(
+                  icon: _submitting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.arrow_forward, color: Colors.white, size: 18),
+                  label: Text(
+                    _currentIdx < _totalQuestions - 1 ? 'Next' : 'Finish',
+                    style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
                   ),
                 ),
-              )
-            else
+              ),
+            ] else
               // Next / Finish button
               SizedBox(
                 height: 46,

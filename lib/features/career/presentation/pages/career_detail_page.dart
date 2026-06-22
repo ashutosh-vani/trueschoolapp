@@ -210,7 +210,7 @@ class _CareerDetailPageState extends State<CareerDetailPage> {
             const SizedBox(height: 28),
           ],
 
-          // TrueSchoolAI CTA
+          // Lumi CTA
           _buildVinCta(),
           const SizedBox(height: 32),
 
@@ -900,7 +900,7 @@ class _CareerDetailPageState extends State<CareerDetailPage> {
     );
   }
 
-  // ── TrueSchoolAI CTA ─────────────────────────────────────────────────────────
+  // ── Lumi CTA ──────────────────────────────────────────────────────────────────
   Widget _buildVinCta() {
     return Container(
       width: double.infinity,
@@ -928,7 +928,7 @@ class _CareerDetailPageState extends State<CareerDetailPage> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Ask TrueSchoolAI about this career',
+            'Ask Lumi about this career',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
@@ -959,7 +959,7 @@ class _CareerDetailPageState extends State<CareerDetailPage> {
                 borderRadius: BorderRadius.circular(24),
               ),
               child: const Text(
-                'Chat with TrueSchoolAI',
+                'Chat with Lumi',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
