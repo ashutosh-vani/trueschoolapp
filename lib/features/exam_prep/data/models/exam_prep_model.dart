@@ -3,27 +3,52 @@ import 'package:flutter/foundation.dart';
 class ExamPrepSubject {
   final String name;
   final String? examDate;
-  final String syllabusType; // 'full' or 'select'
-  final String? customTopics;
+  final String syllabusType; // 'full' or 'select' / 'custom'
+  final String? customTopics; // topics list joined by comma
+  final List<String> topics;
   final String? examPattern; // 'mcq', 'mixed', 'descriptive', 'board'
   final String confidenceLevel; // 'low', 'medium', 'high'
+  final int daysLeft;
 
   ExamPrepSubject({
     required this.name,
     this.examDate,
     this.syllabusType = 'full',
     this.customTopics,
+    this.topics = const [],
     this.examPattern,
     this.confidenceLevel = 'medium',
+    this.daysLeft = 0,
   });
+
+  factory ExamPrepSubject.fromJson(Map<String, dynamic> json) {
+    final rawTopics = json['topics'];
+    List<String> topicsList = [];
+    if (rawTopics is List) {
+      topicsList = rawTopics.cast<String>();
+    } else if (rawTopics is String) {
+      topicsList = rawTopics.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList();
+    }
+    return ExamPrepSubject(
+      name: json['name'] ?? '',
+      examDate: json['examDate'] ?? json['exam_date'],
+      syllabusType: json['syllabusMode'] ?? json['syllabus_type'] ?? 'full',
+      topics: topicsList,
+      customTopics: json['custom_topics'] ?? topicsList.join(', '),
+      examPattern: json['pattern'] ?? json['exam_pattern'],
+      confidenceLevel: json['confidence'] ?? json['confidence_level'] ?? 'medium',
+      daysLeft: json['daysLeft'] ?? json['days_left'] ?? 0,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'name': name,
-        'exam_date': examDate,
-        'syllabus_type': syllabusType,
-        'custom_topics': customTopics,
-        'exam_pattern': examPattern,
-        'confidence_level': confidenceLevel,
+        'examDate': examDate ?? '',
+        'daysLeft': daysLeft,
+        'syllabusMode': syllabusType == 'select' ? 'custom' : syllabusType,
+        'topics': topics.isNotEmpty ? topics : (customTopics != null ? customTopics!.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList() : <String>[]),
+        'pattern': examPattern ?? 'mixed',
+        'confidence': confidenceLevel,
       };
 }
 
@@ -31,23 +56,22 @@ class CreateExamPrepRequest {
   final String studentClass;
   final String board;
   final List<ExamPrepSubject> subjects;
-  final String dailyStudyTime; // '30min', '1hr', '2hr', '3hr+'
+  final int dailyStudyMinutes;
   final bool startQuiz;
 
   CreateExamPrepRequest({
     required this.studentClass,
     required this.board,
     required this.subjects,
-    required this.dailyStudyTime,
+    required this.dailyStudyMinutes,
     required this.startQuiz,
   });
 
   Map<String, dynamic> toJson() => {
-        'student_class': studentClass,
+        'class': studentClass.replaceAll('Class ', ''),
         'board': board,
         'subjects': subjects.map((s) => s.toJson()).toList(),
-        'daily_study_time': dailyStudyTime,
-        'start_quiz': startQuiz,
+        'dailyStudyMinutes': dailyStudyMinutes,
       };
 }
 
@@ -56,8 +80,9 @@ class ExamPrepPlan {
   final String studentClass;
   final String board;
   final List<String> subjects;
+  final List<ExamPrepSubject> rawSubjects;
   final String dailyStudyTime;
-  final String status; // 'active', 'completed', 'paused'
+  final String status; // 'active', 'completed', 'paused', 'upcoming'
   final String createdAt;
   final int? daysLeft;
   final int? progressPercent;
@@ -67,6 +92,7 @@ class ExamPrepPlan {
     required this.studentClass,
     required this.board,
     required this.subjects,
+    this.rawSubjects = const [],
     required this.dailyStudyTime,
     this.status = 'active',
     this.createdAt = '',
@@ -74,15 +100,67 @@ class ExamPrepPlan {
     this.progressPercent,
   });
 
+  static String calculatePlanStatus(List<ExamPrepSubject> subjects) {
+    if (subjects.isEmpty) return 'active';
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
+    bool allPast = true;
+    bool anyActive = false;
+
+    for (final s in subjects) {
+      if (s.examDate == null || s.examDate!.isEmpty) {
+        allPast = false;
+        continue;
+      }
+      try {
+        final parsedDate = DateTime.parse(s.examDate!);
+        final examDay = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
+
+        if (examDay.isBefore(today)) {
+          // past exam
+        } else {
+          allPast = false;
+
+          final diff = examDay.difference(today).inDays;
+          if (diff >= 0 && diff <= 30) {
+            anyActive = true;
+          }
+        }
+      } catch (_) {
+        allPast = false;
+      }
+    }
+
+    if (allPast) return 'completed';
+    if (anyActive) return 'active';
+    return 'upcoming';
+  }
+
   factory ExamPrepPlan.fromJson(Map<String, dynamic> json) {
     debugPrint('[ExamPrepPlan] parsing: $json');
+    final rawSubjectsJson = json['subjects'] as List<dynamic>? ?? [];
+    final List<ExamPrepSubject> parsedSubjects = rawSubjectsJson
+        .map((s) {
+          if (s is Map) {
+            return ExamPrepSubject.fromJson(s.cast<String, dynamic>());
+          }
+          return ExamPrepSubject(name: s.toString());
+        })
+        .toList();
+
+    final studentClass = json['class'] ?? json['student_class'] ?? json['grade'] ?? '';
+    final status = json['status'] ?? calculatePlanStatus(parsedSubjects);
+
     return ExamPrepPlan(
       id: json['id'] ?? json['_id'] ?? json['plan_id'] ?? '',
-      studentClass: json['student_class'] ?? json['class'] ?? json['grade'] ?? '',
+      studentClass: studentClass,
       board: json['board'] ?? '',
-      subjects: _parseSubjects(json['subjects']),
-      dailyStudyTime: json['daily_study_time'] ?? json['study_time'] ?? '',
-      status: json['status'] ?? 'active',
+      subjects: parsedSubjects.map((s) => s.name).toList(),
+      rawSubjects: parsedSubjects,
+      dailyStudyTime: (json['dailyStudyMinutes'] ?? json['daily_study_time'] ?? '').toString(),
+      status: status,
       createdAt: json['created_at'] ?? json['createdAt'] ?? '',
       daysLeft: json['days_left'] ?? json['daysLeft'],
       progressPercent: json['progress_percent'] ?? json['progressPercent'],
@@ -92,33 +170,28 @@ class ExamPrepPlan {
   /// Parse from the real /student/exams response shape
   factory ExamPrepPlan.fromExamJson(Map<String, dynamic> json) {
     debugPrint('[ExamPrepPlan.fromExamJson] parsing: $json');
-    // Each exam is one subject — wrap it as a single-subject plan
-    final subject = json['subject'] ?? json['name'] ?? '';
+    final subjectName = json['subject'] ?? json['name'] ?? '';
     final daysLeft = json['daysLeft'] ?? json['days_left'];
+    final daysLeftInt = daysLeft is int ? daysLeft : int.tryParse(daysLeft?.toString() ?? '');
+
+    final subject = ExamPrepSubject(
+      name: subjectName,
+      examDate: json['date'] ?? json['exam_date'] ?? '',
+      daysLeft: daysLeftInt ?? 0,
+    );
+
     return ExamPrepPlan(
       id: json['id'] ?? json['_id'] ?? '',
       studentClass: json['class'] ?? json['student_class'] ?? json['grade'] ?? '',
       board: json['board'] ?? '',
-      subjects: subject.isNotEmpty ? [subject] : [],
+      subjects: subjectName.isNotEmpty ? [subjectName] : [],
+      rawSubjects: [subject],
       dailyStudyTime: '',
       status: 'active',
       createdAt: json['date'] ?? json['exam_date'] ?? '',
-      daysLeft: daysLeft is int ? daysLeft : int.tryParse(daysLeft?.toString() ?? ''),
+      daysLeft: daysLeftInt,
       progressPercent: json['readinessPercent'] ?? json['readiness_percent'],
     );
-  }
-
-  static List<String> _parseSubjects(dynamic raw) {
-    if (raw == null) return [];
-    if (raw is List) {
-      return raw.map((s) {
-        if (s is String) return s;
-        if (s is Map) return (s['name'] ?? s['subject'] ?? '').toString();
-        return s.toString();
-      }).where((s) => s.isNotEmpty).toList();
-    }
-    if (raw is String) return [raw];
-    return [];
   }
 }
 

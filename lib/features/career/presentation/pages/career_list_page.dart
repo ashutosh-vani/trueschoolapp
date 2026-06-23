@@ -4,6 +4,18 @@ import 'package:trueschoolapp/features/career/data/models/career_domain.dart';
 import 'package:trueschoolapp/features/career/data/services/career_service.dart';
 import 'package:trueschoolapp/features/career/presentation/pages/career_detail_page.dart';
 
+class CareerRow {
+  final String id;
+  final String title;
+  final List<Career> careers;
+
+  CareerRow({
+    required this.id,
+    required this.title,
+    required this.careers,
+  });
+}
+
 // Cycling gradient pairs for career cards (matching web CARD_GRADIENTS)
 const List<List<Color>> _cardGradients = [
   [Color(0xFF695BE6), Color(0xFF8E82F3)],
@@ -24,8 +36,235 @@ class CareerListPage extends StatefulWidget {
 }
 
 class _CareerListPageState extends State<CareerListPage> {
-  List<Career> _careers = [];
+  List<CareerRow> _careerRows = [];
   bool _isLoading = true;
+
+  static const Map<String, List<String>> _idKeywords = {
+    'tech':           ['tech', 'engineering', 'software', 'it'],
+    'medical':        ['medical', 'health', 'medicine', 'pharma'],
+    'government':     ['government', 'defence', 'defense', 'public'],
+    'business':       ['business', 'finance', 'commerce', 'economics'],
+    'law':            ['law', 'legal', 'policy', 'justice'],
+    'education':      ['education', 'research', 'academic', 'science'],
+    'arts':           ['arts', 'media', 'design', 'creative'],
+    'social':         ['social', 'environment', 'sustainability', 'ngo'],
+    'infrastructure': ['infrastructure', 'travel', 'transport', 'civil'],
+    'sports':         ['sports', 'events', 'fitness', 'recreation'],
+  };
+
+  String _getCanonicalId(String domainId, String domainName) {
+    final haystack = '$domainId $domainName'.toLowerCase();
+    for (final entry in _idKeywords.entries) {
+      if (entry.value.any((keyword) => haystack.contains(keyword))) {
+        return entry.key;
+      }
+    }
+    return domainId.toLowerCase();
+  }
+
+  List<CareerRow> _getMockRowsForDomain(String domainId, String domainName) {
+    final canonicalId = _getCanonicalId(domainId, domainName);
+    
+    if (canonicalId == 'tech') {
+      return [
+        CareerRow(
+          id: 'row_tech_1',
+          title: 'Software & AI',
+          careers: [
+            const Career(
+              id: 'c_swe',
+              domainId: 'tech',
+              title: 'Software Engineer',
+              description: 'Build & maintain systems',
+              badge: 'High Demand',
+              badgeColor: 'bg-[#695be6] text-white',
+            ),
+            const Career(
+              id: 'c_ds',
+              domainId: 'tech',
+              title: 'Data Scientist',
+              description: 'Insights from data',
+              badge: 'Top Paying',
+              badgeColor: 'bg-amber-500 text-white',
+            ),
+            const Career(
+              id: 'c_ml',
+              domainId: 'tech',
+              title: 'ML Engineer',
+              description: 'AI model development',
+              badge: 'Emerging',
+              badgeColor: 'bg-emerald-500 text-white',
+            ),
+            const Career(
+              id: 'c_cyber',
+              domainId: 'tech',
+              title: 'Cybersecurity Analyst',
+              description: 'Protect digital assets',
+              badge: 'Critical',
+              badgeColor: 'bg-red-500 text-white',
+            ),
+          ],
+        ),
+        CareerRow(
+          id: 'row_tech_2',
+          title: 'Engineering',
+          careers: [
+            const Career(
+              id: 'c_aero',
+              domainId: 'tech',
+              title: 'Aerospace Engineer',
+              description: 'Aircraft & spacecraft',
+              badge: 'Prestigious',
+              badgeColor: 'bg-blue-500 text-white',
+            ),
+            const Career(
+              id: 'c_civil',
+              domainId: 'tech',
+              title: 'Civil Engineer',
+              description: 'Infrastructure design',
+              badge: 'Stable',
+              badgeColor: 'bg-slate-500 text-white',
+            ),
+            const Career(
+              id: 'c_mech',
+              domainId: 'tech',
+              title: 'Mechanical Engineer',
+              description: 'Machines & systems',
+              badge: 'Versatile',
+              badgeColor: 'bg-orange-500 text-white',
+            ),
+          ],
+        ),
+      ];
+    } else if (canonicalId == 'medical') {
+      return [
+        CareerRow(
+          id: 'row_med_1',
+          title: 'Doctors & Surgeons',
+          careers: [
+            const Career(
+              id: 'c_cardio',
+              domainId: 'medical',
+              title: 'Cardiologist',
+              description: 'Heart specialist',
+              badge: 'Premier Grade',
+              badgeColor: 'bg-red-500 text-white',
+            ),
+            const Career(
+              id: 'c_neuro',
+              domainId: 'medical',
+              title: 'Neurosurgeon',
+              description: 'Brain & nervous system',
+              badge: 'Elite',
+              badgeColor: 'bg-[#695be6] text-white',
+            ),
+            const Career(
+              id: 'c_gp',
+              domainId: 'medical',
+              title: 'General Practitioner',
+              description: 'Primary care physician',
+              badge: 'Essential',
+              badgeColor: 'bg-emerald-500 text-white',
+            ),
+          ],
+        ),
+        CareerRow(
+          id: 'row_med_2',
+          title: 'Research & Biotech',
+          careers: [
+            const Career(
+              id: 'c_gene',
+              domainId: 'medical',
+              title: 'Geneticist',
+              description: 'DNA & heredity analysis',
+              badge: 'Future Tech',
+              badgeColor: 'bg-purple-500 text-white',
+            ),
+            const Career(
+              id: 'c_biomed',
+              domainId: 'medical',
+              title: 'Biomedical Engineer',
+              description: 'Healthcare technology',
+              badge: 'Innovative',
+              badgeColor: 'bg-blue-500 text-white',
+            ),
+            const Career(
+              id: 'c_pharma',
+              domainId: 'medical',
+              title: 'Pharmacist',
+              description: 'Medication management',
+              badge: 'Stable',
+              badgeColor: 'bg-slate-500 text-white',
+            ),
+          ],
+        ),
+      ];
+    } else if (canonicalId == 'government') {
+      return [
+        CareerRow(
+          id: 'row_gov_1',
+          title: 'Civil Services',
+          careers: [
+            const Career(
+              id: 'c_ias',
+              domainId: 'government',
+              title: 'Administrative Service (IAS)',
+              description: 'Public administration',
+              badge: 'Premier Grade',
+              badgeColor: 'bg-[#695be6] text-white',
+            ),
+            const Career(
+              id: 'c_ips',
+              domainId: 'government',
+              title: 'Police Service (IPS)',
+              description: 'Law & order',
+              badge: 'Security Focus',
+              badgeColor: 'bg-blue-500 text-white',
+            ),
+            const Career(
+              id: 'c_ifs',
+              domainId: 'government',
+              title: 'Foreign Service (IFS)',
+              description: 'International relations',
+              badge: 'Global Reach',
+              badgeColor: 'bg-emerald-500 text-white',
+            ),
+          ],
+        ),
+        CareerRow(
+          id: 'row_gov_2',
+          title: 'Armed Forces',
+          careers: [
+            const Career(
+              id: 'c_army',
+              domainId: 'government',
+              title: 'Army Officer',
+              description: 'Ground combat & defense',
+              badge: 'NDA/CDS',
+              badgeColor: 'bg-slate-600 text-white',
+            ),
+            const Career(
+              id: 'c_navy',
+              domainId: 'government',
+              title: 'Navy Officer',
+              description: 'Maritime security',
+              badge: 'NDA/INET',
+              badgeColor: 'bg-blue-600 text-white',
+            ),
+            const Career(
+              id: 'c_af',
+              domainId: 'government',
+              title: 'Air Force Pilot',
+              description: 'Aerial combat & transport',
+              badge: 'AFCAT/NDA',
+              badgeColor: 'bg-sky-500 text-white',
+            ),
+          ],
+        ),
+      ];
+    }
+    return [];
+  }
 
   @override
   void initState() {
@@ -37,7 +276,17 @@ class _CareerListPageState extends State<CareerListPage> {
     final careers =
         await CareerService.getCareersForDomain(widget.domain.id);
     setState(() {
-      _careers = careers;
+      if (careers.isNotEmpty) {
+        _careerRows = [
+          CareerRow(
+            id: 'api_row',
+            title: 'Careers in this field',
+            careers: careers,
+          ),
+        ];
+      } else {
+        _careerRows = _getMockRowsForDomain(widget.domain.id, widget.domain.name);
+      }
       _isLoading = false;
     });
   }
@@ -172,10 +421,13 @@ class _CareerListPageState extends State<CareerListPage> {
           ),
 
           // Careers section
-          if (_careers.isEmpty)
+          if (_careerRows.isEmpty)
             _buildEmptyState()
           else
-            _buildCareersSection(),
+            ..._careerRows.map((row) => Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: _buildCareersSection(row),
+                )),
 
           const SizedBox(height: 40),
           _buildFooter(),
@@ -218,7 +470,7 @@ class _CareerListPageState extends State<CareerListPage> {
   }
 
   // ── Careers section with row title + horizontal scroll ─────────────────
-  Widget _buildCareersSection() {
+  Widget _buildCareersSection(CareerRow row) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -228,9 +480,9 @@ class _CareerListPageState extends State<CareerListPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Careers in this field',
-                style: TextStyle(
+              Text(
+                row.title,
+                style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
@@ -258,10 +510,10 @@ class _CareerListPageState extends State<CareerListPage> {
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _careers.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 16),
+            itemCount: row.careers.length,
+            separatorBuilder: (context, index) => const SizedBox(width: 16),
             itemBuilder: (context, index) {
-              return _buildCareerCard(_careers[index], index);
+              return _buildCareerCard(row.careers[index], index);
             },
           ),
         ),
@@ -379,6 +631,25 @@ class _CareerListPageState extends State<CareerListPage> {
 
   // ── Badge chip on career card ──────────────────────────────────────────
   Widget _buildBadge(Career career) {
+    if (career.badge != null && career.badge!.isNotEmpty) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: _parseBadgeColor(career.badgeColor),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          career.badge!.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+            letterSpacing: 0.5,
+          ),
+        ),
+      );
+    }
+
     // Pick badge text and color based on available data
     String label;
     Color bgColor;
@@ -414,6 +685,23 @@ class _CareerListPageState extends State<CareerListPage> {
         ),
       ),
     );
+  }
+
+  Color _parseBadgeColor(String? colorStr) {
+    if (colorStr == null) return AppColors.primary;
+    final bc = colorStr.toLowerCase();
+    if (bc.contains('#695be6')) return const Color(0xFF695BE6);
+    if (bc.contains('amber')) return const Color(0xFFF59E0B);
+    if (bc.contains('emerald')) return const Color(0xFF10B981);
+    if (bc.contains('red')) return const Color(0xFFEF4444);
+    if (bc.contains('blue-500')) return const Color(0xFF3B82F6);
+    if (bc.contains('blue-600')) return const Color(0xFF2563EB);
+    if (bc.contains('slate-500')) return const Color(0xFF64748B);
+    if (bc.contains('slate-600')) return const Color(0xFF475569);
+    if (bc.contains('orange')) return const Color(0xFFEA580C);
+    if (bc.contains('purple')) return const Color(0xFFA855F7);
+    if (bc.contains('sky')) return const Color(0xFF0EA5E9);
+    return AppColors.primary;
   }
 
   // ── Empty state ────────────────────────────────────────────────────────

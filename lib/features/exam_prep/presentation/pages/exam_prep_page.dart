@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/exam_prep/data/models/exam_prep_model.dart';
 import 'package:trueschoolapp/features/exam_prep/data/services/exam_prep_service.dart';
-import 'package:trueschoolapp/features/exam_prep/data/services/local_exam_prep_storage.dart';
 import 'package:trueschoolapp/features/exam_prep/presentation/pages/create_exam_prep_page.dart';
 
 // ── Fallback data matching web frontend EXAM_DATA ────────────────────────────
@@ -51,30 +50,15 @@ class _ExamPrepPageState extends State<ExamPrepPage> {
       ExamPrepService.getRawExams(headers),
       ExamPrepService.getRawRevisionTasks(headers),
       ExamPrepService.getStudyStats(),
-      LocalExamPrepStorage.getPlans(),
     ]);
 
     final apiExams = results[0] as List<Map<String, dynamic>>;
     final apiTasks = results[1] as List<RevisionTask>;
     final stats = results[2] as StudyStats?;
-    final localPlans = results[3] as List<Map<String, dynamic>>;
-
-    // Build exam cards from local plans (one card per subject)
-    final localExamCards = localPlans
-        .expand((plan) => LocalExamPrepStorage.planToExamCards(plan))
-        .map((j) => _WebExam.fromJson(j))
-        .toList();
-
-    // Merge: API exams first, then local plans
-    final allExams = [
-      ...apiExams.map((j) => _WebExam.fromJson(j)),
-      ...localExamCards,
-    ];
 
     if (!mounted) return;
     setState(() {
-      // Use real data if available, otherwise fallback — same as web
-      _exams = allExams.isNotEmpty ? allExams : _fallbackExams;
+      _exams = apiExams.isNotEmpty ? apiExams.map((j) => _WebExam.fromJson(j)).toList() : _fallbackExams;
       _tasks = apiTasks.isNotEmpty ? apiTasks : List.from(_fallbackTasks);
       if (stats != null) {
         _studyStreak = stats.studyStreak;

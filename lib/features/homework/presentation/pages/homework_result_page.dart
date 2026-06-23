@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/homework/data/models/homework_question.dart';
+import 'package:trueschoolapp/features/homework/presentation/pages/homework_attempt_page.dart';
 
 /// Full result screen shown after homework submission — mirrors web HomeworkResult.jsx.
 class HomeworkResultPage extends StatelessWidget {
@@ -310,7 +311,16 @@ class HomeworkResultPage extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () {
+              Navigator.of(context).pushReplacement(
+                MaterialPageRoute(
+                  builder: (_) => HomeworkAttemptPage(
+                    homeworkId: homeworkId,
+                    title: homeworkTitle,
+                  ),
+                ),
+              );
+            },
             icon: const Icon(Icons.replay, size: 18),
             label: const Text('Retry Homework', style: TextStyle(fontWeight: FontWeight.bold)),
             style: OutlinedButton.styleFrom(
@@ -325,12 +335,7 @@ class HomeworkResultPage extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: ElevatedButton.icon(
-            onPressed: () {
-              // Pop back to homework list
-              Navigator.of(context).popUntil((route) {
-                return route.settings.name == '/student-home' || route.isFirst;
-              });
-            },
+            onPressed: () => Navigator.of(context).pop(),
             icon: const Icon(Icons.arrow_back, size: 18),
             label: const Text('Back to Homework', style: TextStyle(fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
@@ -373,9 +378,7 @@ class HomeworkResultPage extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).popUntil((route) => route.isFirst || route.settings.name == '/student-home');
-                    },
+                    onPressed: () => Navigator.of(context).pop(),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       foregroundColor: Colors.white,

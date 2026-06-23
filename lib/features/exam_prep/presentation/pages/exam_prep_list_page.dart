@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/exam_prep/data/models/exam_prep_model.dart';
 import 'package:trueschoolapp/features/exam_prep/data/services/exam_prep_service.dart';
-import 'package:trueschoolapp/features/exam_prep/data/services/local_exam_prep_storage.dart';
 import 'package:trueschoolapp/features/exam_prep/presentation/pages/create_exam_prep_page.dart';
 import 'package:trueschoolapp/features/exam_prep/presentation/pages/exam_prep_detail_page.dart';
 
@@ -34,27 +33,11 @@ class _ExamPrepListPageState extends State<ExamPrepListPage> {
   Future<void> _loadPlans() async {
     setState(() => _isLoading = true);
 
-    final results = await Future.wait([
-      ExamPrepService.getExamPreps(),
-      LocalExamPrepStorage.getPlans(),
-    ]);
-
-    final apiPlans = results[0] as List<ExamPrepPlan>;
-    final localRaw = results[1] as List<Map<String, dynamic>>;
-
-    // Build cards from local plans (authoritative for user-created)
-    final localCards = localRaw.map((p) => _PlanCard.fromLocal(p)).toList();
-
-    // Build cards from API plans (skip if already represented locally)
-    final localIds = localCards.map((c) => c.id).toSet();
-    final apiCards = apiPlans
-        .where((p) => !localIds.contains(p.id))
-        .map((p) => _PlanCard.fromApi(p))
-        .toList();
+    final apiPlans = await ExamPrepService.getExamPreps();
 
     if (!mounted) return;
     setState(() {
-      _plans = [...localCards, ...apiCards];
+      _plans = apiPlans.map((p) => _PlanCard.fromApi(p)).toList();
       _isLoading = false;
     });
   }
@@ -100,16 +83,8 @@ class _ExamPrepListPageState extends State<ExamPrepListPage> {
     // Optimistic removal from UI immediately
     setState(() => _plans.removeWhere((p) => p.id == plan.id));
 
-    // Persist deletion based on plan origin
-    if (plan.id.startsWith('local_')) {
-      // User-created plan stored in SharedPreferences
-      await LocalExamPrepStorage.deletePlan(plan.id);
-    } else if (!plan.id.startsWith('fallback_') && !plan.id.startsWith('revision_')) {
-      // Real API plan — fire-and-forget, ignore failures
-      await ExamPrepService.deleteExamPrep(plan.id);
-    }
-    // Synthetic fallback ids ('fallback_plan', 'revision_plan') only exist in
-    // memory — removing from _plans above is sufficient, nothing to persist.
+    // Real API plan — fire-and-forget, ignore failures
+    await ExamPrepService.deleteExamPrep(plan.id);
   }
 
   void _startOver(_PlanCard plan) async {
@@ -144,12 +119,7 @@ class _ExamPrepListPageState extends State<ExamPrepListPage> {
 
     // Remove old plan — optimistic then persist
     setState(() => _plans.removeWhere((p) => p.id == plan.id));
-
-    if (plan.id.startsWith('local_')) {
-      await LocalExamPrepStorage.deletePlan(plan.id);
-    } else if (!plan.id.startsWith('fallback_') && !plan.id.startsWith('revision_')) {
-      await ExamPrepService.deleteExamPrep(plan.id);
-    }
+    await ExamPrepService.deleteExamPrep(plan.id);
 
     // Launch create flow
     if (!mounted) return;
@@ -483,6 +453,7 @@ class _ExamPrepListPageState extends State<ExamPrepListPage> {
     String label;
     switch (status) {
       case 'completed':
+      case 'past':
         fg = const Color(0xFF6B7280);
         bg = const Color(0xFFF3F4F6);
         label = 'Completed';
@@ -492,9 +463,14 @@ class _ExamPrepListPageState extends State<ExamPrepListPage> {
         bg = const Color(0xFFFFFBEB);
         label = 'Paused';
         break;
-      default:
+      case 'upcoming':
         fg = AppColors.primary;
         bg = AppColors.primary.withValues(alpha: 0.1);
+        label = 'Upcoming';
+        break;
+      default:
+        fg = const Color(0xFF10B981);
+        bg = const Color(0xFFD1FAE5);
         label = 'Active';
     }
     return Container(
@@ -516,11 +492,34 @@ class _ExamPrepListPageState extends State<ExamPrepListPage> {
 
   // ── Subject chip ──────────────────────────────────────────────────────────
 
+  Color _subjectColor(String subject) {
+    switch (subject.toLowerCase()) {
+      case 'maths':
+      case 'mathematics':
+        return const Color(0xFF695BE6);
+      case 'science':
+      case 'physics':
+        return const Color(0xFFFB923C);
+      case 'chemistry':
+      case 'biology':
+        return const Color(0xFF10B981);
+      case 'english':
+        return const Color(0xFF60A5FA);
+      case 'social':
+        return const Color(0xFF34D399);
+      case 'hindi':
+        return const Color(0xFFF472B6);
+      default:
+        return const Color(0xFF9CA3AF);
+    }
+  }
+
   Widget _subjectChip(String subject) {
+    final color = _subjectColor(subject);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.12),
+        color: color,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -528,7 +527,7 @@ class _ExamPrepListPageState extends State<ExamPrepListPage> {
         style: const TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: AppColors.primary,
+          color: Colors.white,
         ),
       ),
     );
@@ -546,26 +545,42 @@ class _ExamPrepListPageState extends State<ExamPrepListPage> {
 
   String _planSubtitle(_PlanCard plan) {
     final count = plan.subjects.length;
-    final subjectPart =
-        '$count ${count == 1 ? 'subject' : 'subjects'}';
-    final statusPart = plan.status == 'completed'
-        ? 'All exams done'
-        : plan.progressPercent != null
-            ? '${plan.progressPercent}% ready'
-            : 'In progress';
-    return '$subjectPart · $statusPart';
+    final subjectPart = '$count ${count == 1 ? 'subject' : 'subjects'}';
+    final status = ExamPrepPlan.calculatePlanStatus(plan.rawSubjects);
+    final upcoming = plan.getUpcomingExam();
+    
+    if (upcoming != null) {
+      final examDate = DateTime.parse(upcoming.examDate!);
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final days = examDate.difference(today).inDays;
+      return '$subjectPart · Next: ${upcoming.name} in ${days < 0 ? 0 : days}d';
+    } else if (status == 'completed' || status == 'past') {
+      return '$subjectPart · All exams done';
+    } else {
+      return '$subjectPart · In progress';
+    }
   }
 
   String _statusMessage(_PlanCard plan) {
-    switch (plan.status) {
+    final status = ExamPrepPlan.calculatePlanStatus(plan.rawSubjects);
+    switch (status) {
       case 'completed':
+      case 'past':
         return 'All exams completed';
       case 'paused':
         return 'Plan paused';
       default:
-        return plan.daysLeft != null
-            ? '${plan.daysLeft} day${plan.daysLeft == 1 ? '' : 's'} left'
-            : 'Active plan';
+        final upcoming = plan.getUpcomingExam();
+        if (upcoming != null) {
+          final examDate = DateTime.parse(upcoming.examDate!);
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final days = examDate.difference(today).inDays;
+          final finalDays = days < 0 ? 0 : days;
+          return '$finalDays day${finalDays == 1 ? '' : 's'} left';
+        }
+        return 'Active plan';
     }
   }
 
@@ -636,6 +651,7 @@ class _PlanCard {
   final String studentClass;
   final String board;
   final List<String> subjects;
+  final List<ExamPrepSubject> rawSubjects;
   final String status;
   final int? daysLeft;
   final int? progressPercent;
@@ -645,31 +661,11 @@ class _PlanCard {
     required this.studentClass,
     required this.board,
     required this.subjects,
+    required this.rawSubjects,
     this.status = 'active',
     this.daysLeft,
     this.progressPercent,
   });
-
-  /// Build from locally stored plan (SharedPreferences)
-  factory _PlanCard.fromLocal(Map<String, dynamic> json) {
-    final subjects = (json['subjects'] as List<dynamic>? ?? [])
-        .map((s) {
-          if (s is String) return s;
-          if (s is Map) return (s['name'] ?? '').toString();
-          return '';
-        })
-        .where((s) => s.isNotEmpty)
-        .toList()
-        .cast<String>();
-
-    return _PlanCard(
-      id: json['id'] ?? '',
-      studentClass: json['student_class'] ?? '',
-      board: json['board'] ?? '',
-      subjects: subjects,
-      status: json['status'] ?? 'active',
-    );
-  }
 
   /// Build from API ExamPrepPlan
   factory _PlanCard.fromApi(ExamPrepPlan plan) {
@@ -678,9 +674,36 @@ class _PlanCard {
       studentClass: plan.studentClass,
       board: plan.board,
       subjects: plan.subjects,
+      rawSubjects: plan.rawSubjects,
       status: plan.status,
       daysLeft: plan.daysLeft,
       progressPercent: plan.progressPercent,
     );
+  }
+
+  ExamPrepSubject? getUpcomingExam() {
+    if (rawSubjects.isEmpty) return null;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    
+    List<ExamPrepSubject> upcoming = [];
+    for (final s in rawSubjects) {
+      if (s.examDate == null || s.examDate!.isEmpty) continue;
+      try {
+        final parsedDate = DateTime.parse(s.examDate!);
+        final examDay = DateTime(parsedDate.year, parsedDate.month, parsedDate.day);
+        if (examDay.isAfter(today) || examDay.isAtSameMomentAs(today)) {
+          upcoming.add(s);
+        }
+      } catch (_) {}
+    }
+    
+    if (upcoming.isEmpty) return null;
+    upcoming.sort((a, b) {
+      final ad = DateTime.parse(a.examDate!);
+      final bd = DateTime.parse(b.examDate!);
+      return ad.compareTo(bd);
+    });
+    return upcoming.first;
   }
 }

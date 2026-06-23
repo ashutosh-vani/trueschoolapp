@@ -11,9 +11,9 @@ class QuestionOption {
 
   factory QuestionOption.fromJson(Map<String, dynamic> json) {
     return QuestionOption(
-      id: json['id'] ?? '',
-      text: json['text'] ?? '',
-      isCorrect: json['is_correct'] ?? false,
+      id: json['id'] ?? json['_id'] ?? '',
+      text: json['text'] ?? json['label'] ?? '',
+      isCorrect: json['is_correct'] ?? json['isCorrect'] ?? false,
     );
   }
 }
@@ -45,19 +45,30 @@ class HomeworkQuestion {
 
   factory HomeworkQuestion.fromJson(Map<String, dynamic> json) {
     return HomeworkQuestion(
-      id: json['id'] ?? '',
-      questionNumber: (json['question_number'] as num?)?.toInt() ?? 1,
-      totalQuestions: (json['total_questions'] as num?)?.toInt() ?? 1,
-      questionText: json['question_text'] ?? '',
-      answerType: json['answer_type'] ?? 'mcq',
+      id: json['id'] ?? json['_id'] ?? '',
+      questionNumber: (json['questionNumber'] as num?)?.toInt() ??
+          (json['question_number'] as num?)?.toInt() ??
+          1,
+      totalQuestions: (json['totalQuestions'] as num?)?.toInt() ??
+          (json['total_questions'] as num?)?.toInt() ??
+          1,
+      questionText: json['questionText'] ?? json['question_text'] ?? '',
+      answerType: json['answerType'] ?? json['answer_type'] ?? 'mcq',
       options: (json['options'] as List<dynamic>?)
-              ?.map((o) => QuestionOption.fromJson(o as Map<String, dynamic>))
+              ?.map((o) {
+                if (o is Map) {
+                  return QuestionOption.fromJson(Map<String, dynamic>.from(o));
+                }
+                return QuestionOption(id: '', text: o.toString());
+              })
               .toList() ??
           [],
       hint: json['hint'],
-      vinNudge: json['vin_nudge'],
-      maxPoints: (json['max_points'] as num?)?.toInt() ?? 1,
-      sampleAnswer: json['sample_answer'],
+      vinNudge: json['vinNudge'] ?? json['vin_nudge'],
+      maxPoints: (json['maxPoints'] as num?)?.toInt() ??
+          (json['max_points'] as num?)?.toInt() ??
+          1,
+      sampleAnswer: json['sampleAnswer'] ?? json['sample_answer'],
     );
   }
 }

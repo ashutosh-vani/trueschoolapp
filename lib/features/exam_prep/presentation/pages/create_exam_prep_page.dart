@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/exam_prep/data/models/exam_prep_model.dart';
 import 'package:trueschoolapp/features/exam_prep/data/services/exam_prep_service.dart';
-import 'package:trueschoolapp/features/exam_prep/data/services/local_exam_prep_storage.dart';
 import 'package:trueschoolapp/features/learning_gaps/presentation/pages/gap_quiz_page.dart';
 
 class CreateExamPrepPage extends StatefulWidget {
@@ -106,46 +105,60 @@ class _CreateExamPrepPageState extends State<CreateExamPrepPage> {
   Future<void> _submit() async {
     setState(() => _isSubmitting = true);
 
-    final subjectList = _subjects.map((name) {
+    int studyMinutes = 60;
+    if (_dailyStudyTime != null) {
+      if (_dailyStudyTime!.contains('30')) {
+        studyMinutes = 30;
+      } else if (_dailyStudyTime!.contains('1')) {
+        studyMinutes = 60;
+      } else if (_dailyStudyTime!.contains('2')) {
+        studyMinutes = 120;
+      } else if (_dailyStudyTime!.contains('3')) {
+        studyMinutes = 180;
+      }
+    }
+
+    final subjectsPayload = _subjects.map((name) {
       final date = _examDates[name];
-      return {
-        'name': name,
-        'examDate': date != null
-            ? '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}'
-            : null,
-        'syllabusType': _syllabusType[name] ?? 'full',
-        'customTopics': _topicsControllers[name]?.text.trim() ?? '',
-        'examPattern': _examPattern[name],
-        'confidenceLevel': _confidence[name] ?? 'medium',
-      };
+      final dateStr = date != null
+          ? '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}'
+          : '';
+      
+      int daysLeft = 0;
+      if (date != null) {
+        final now = DateTime.now();
+        final today = DateTime(now.year, now.month, now.day);
+        final examDay = DateTime(date.year, date.month, date.day);
+        daysLeft = examDay.difference(today).inDays;
+        if (daysLeft < 0) daysLeft = 0;
+      }
+
+      final customTopicsStr = _topicsControllers[name]?.text.trim() ?? '';
+      final List<String> topicsList = customTopicsStr.isNotEmpty
+          ? customTopicsStr.split(',').map((t) => t.trim()).where((t) => t.isNotEmpty).toList()
+          : [];
+
+      return ExamPrepSubject(
+        name: name,
+        examDate: dateStr,
+        syllabusType: _syllabusType[name] ?? 'full',
+        customTopics: customTopicsStr,
+        topics: topicsList,
+        examPattern: _examPattern[name] ?? 'mixed',
+        confidenceLevel: _confidence[name] ?? 'medium',
+        daysLeft: daysLeft,
+      );
     }).toList();
 
-    // 1. Try the backend first
     final request = CreateExamPrepRequest(
       studentClass: _selectedClass!,
       board: _selectedBoard!,
-      subjects: subjectList.map((s) => ExamPrepSubject(
-        name: '${s['name']}',
-        examDate: s['examDate'],
-        syllabusType: '${s['syllabusType']}',
-        customTopics: s['customTopics'],
-        examPattern: s['examPattern'],
-        confidenceLevel: '${s['confidenceLevel']}',
-      )).toList(),
-      dailyStudyTime: _dailyStudyTime!,
+      subjects: subjectsPayload,
+      dailyStudyMinutes: studyMinutes,
       startQuiz: _startQuiz ?? false,
     );
 
-    // Try backend (may 404 — that's fine)
     await ExamPrepService.createExamPrep(request);
-
-    // 2. Always save locally so it shows on the exam prep screen
-    await LocalExamPrepStorage.savePlan(
-      studentClass: _selectedClass!,
-      board: _selectedBoard!,
-      subjects: subjectList,
-      dailyStudyTime: _dailyStudyTime!,
-    );
 
     if (!mounted) return;
     setState(() => _isSubmitting = false);
@@ -158,7 +171,6 @@ class _CreateExamPrepPageState extends State<CreateExamPrepPage> {
         ),
       );
     } else {
-      // Pop back to exam prep page — it will reload and show the new plan
       Navigator.pop(context, true);
     }
   }

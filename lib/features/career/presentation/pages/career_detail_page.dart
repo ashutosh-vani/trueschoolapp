@@ -39,14 +39,150 @@ class _CareerDetailPageState extends State<CareerDetailPage> {
   }
 
   Future<void> _fetchDetail() async {
-    final detail = await CareerService.getCareerDetail(
+    var detail = await CareerService.getCareerDetail(
       _career.domainId,
       _career.id,
     );
+    detail ??= _getMockCareerDetail(_career.id);
     setState(() {
       if (detail != null) _career = detail;
       _isLoading = false;
     });
+  }
+
+  Career? _getMockCareerDetail(String careerId) {
+    if (careerId == 'c_ds') {
+      return const Career(
+        id: 'c_ds',
+        domainId: 'tech',
+        title: 'Data Scientist',
+        description: 'Insights from data',
+        domain: 'Technology & Data',
+        matchPercent: 88,
+        avgSalary: '₹10–35 LPA',
+        growthOutlook: 'Excellent',
+        jobOpenings: '45,000+',
+        yearsToQualify: '4–6 years',
+        whatTheyDo: 'Data scientists use technical skills and analytical thinking to extract meaningful insights from complex data sets. They build mathematical models and use machine learning algorithms to solve business problems and predict future trends. By interpreting large volumes of information, they help organizations make data-driven decisions that impact strategy and innovation.',
+        educationPath: [
+          EducationStep(
+            step: 1,
+            title: '10th Standard',
+            description: 'Choose PCM (Physics, Chemistry, Maths) stream to build a strong analytical foundation.',
+            status: 'done',
+          ),
+          EducationStep(
+            step: 2,
+            title: '12th & Graduation',
+            description: 'Pursue B.Tech in CS/IT or B.Sc in Statistics/Mathematics/Economics.',
+            status: 'done',
+          ),
+          EducationStep(
+            step: 3,
+            title: 'Optional Masters',
+            description: 'M.Tech or MS in Data Science/AI for specialized roles. (Highly Recommended)',
+            status: 'current',
+          ),
+          EducationStep(
+            step: 4,
+            title: 'Certifications',
+            description: 'Google Data Analytics, AWS ML Specialty, or Coursera Deep Learning Specialization.',
+            status: 'upcoming',
+          ),
+        ],
+        keySkills: [
+          CareerSkill(skill: 'Python / R', level: 90, category: 'Technical'),
+          CareerSkill(skill: 'Machine Learning', level: 85, category: 'Technical'),
+          CareerSkill(skill: 'SQL & Databases', level: 80, category: 'Technical'),
+          CareerSkill(skill: 'Data Visualization', level: 75, category: 'Technical'),
+          CareerSkill(skill: 'Statistical Analysis', level: 88, category: 'Analytical'),
+          CareerSkill(skill: 'Communication', level: 70, category: 'Soft Skill'),
+        ],
+        topColleges: [
+          TopCollege(name: 'IIT Madras', exam: 'JEE Advanced', type: 'B.Tech CS'),
+          TopCollege(name: 'ISI Kolkata', exam: 'ISI Entrance', type: 'B.Stat'),
+          TopCollege(name: 'IIM Bangalore', exam: 'CAT', type: 'MBA Analytics'),
+          TopCollege(name: 'BITS Pilani', exam: 'BITSAT', type: 'B.Tech CS'),
+        ],
+        similarCareers: [
+          SimilarCareer(id: 'c_ml', title: 'ML Engineer', matchPercent: 82),
+          SimilarCareer(id: 'c_swe', title: 'Software Engineer', matchPercent: 75),
+          SimilarCareer(id: 'c_cyber', title: 'Cybersecurity', matchPercent: 60),
+        ],
+        dayInLife: [
+          'Analyse datasets and identify patterns using Python',
+          'Build and tune predictive models',
+          'Present findings to business stakeholders',
+          'Collaborate with engineers to deploy models',
+        ],
+      );
+    } else if (careerId == 'c_swe') {
+      return const Career(
+        id: 'c_swe',
+        domainId: 'tech',
+        title: 'Software Engineer',
+        description: 'Build & maintain systems',
+        domain: 'Technology',
+        matchPercent: 94,
+        avgSalary: '₹12–40 LPA',
+        growthOutlook: 'Excellent',
+        jobOpenings: '1,20,000+',
+        yearsToQualify: '4 years',
+        whatTheyDo: 'Software engineers design, develop, test, and maintain software applications and systems. They work across web, mobile, cloud, and embedded systems. They collaborate with product teams to translate requirements into working code, and ensure software is reliable, scalable, and secure.',
+        educationPath: [
+          EducationStep(
+            step: 1,
+            title: '10th Standard',
+            description: 'Strong foundation in Mathematics and Science.',
+            status: 'done',
+          ),
+          EducationStep(
+            step: 2,
+            title: '12th with PCM',
+            description: 'Physics, Chemistry, Mathematics stream.',
+            status: 'done',
+          ),
+          EducationStep(
+            step: 3,
+            title: 'B.Tech / B.E. CS',
+            description: '4-year engineering degree in Computer Science or IT.',
+            status: 'current',
+          ),
+          EducationStep(
+            step: 4,
+            title: 'Internships',
+            description: 'Build real-world experience through internships at tech companies.',
+            status: 'upcoming',
+          ),
+        ],
+        keySkills: [
+          CareerSkill(skill: 'Data Structures', level: 92, category: 'Technical'),
+          CareerSkill(skill: 'System Design', level: 85, category: 'Technical'),
+          CareerSkill(skill: 'JavaScript / Python', level: 90, category: 'Technical'),
+          CareerSkill(skill: 'Cloud (AWS/GCP)', level: 75, category: 'Technical'),
+          CareerSkill(skill: 'Problem Solving', level: 95, category: 'Analytical'),
+          CareerSkill(skill: 'Teamwork', level: 80, category: 'Soft Skill'),
+        ],
+        topColleges: [
+          TopCollege(name: 'IIT Bombay', exam: 'JEE Advanced', type: 'B.Tech CS'),
+          TopCollege(name: 'IIT Delhi', exam: 'JEE Advanced', type: 'B.Tech CS'),
+          TopCollege(name: 'BITS Pilani', exam: 'BITSAT', type: 'B.E. CS'),
+          TopCollege(name: 'NIT Trichy', exam: 'JEE Mains', type: 'B.Tech CS'),
+        ],
+        similarCareers: [
+          SimilarCareer(id: 'c_ds', title: 'Data Scientist', matchPercent: 80),
+          SimilarCareer(id: 'c_ml', title: 'ML Engineer', matchPercent: 85),
+          SimilarCareer(id: 'c_cyber', title: 'Cybersecurity', matchPercent: 65),
+        ],
+        dayInLife: [
+          'Write and review code in daily standups',
+          'Debug and fix production issues',
+          'Design APIs and system architecture',
+          'Deploy features to production',
+        ],
+      );
+    }
+    return null;
   }
 
   @override

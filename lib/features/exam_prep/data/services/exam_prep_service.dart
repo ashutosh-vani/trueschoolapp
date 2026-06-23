@@ -65,104 +65,26 @@ class ExamPrepService {
 
   // ── Real backend endpoints ──────────────────────────────────────────────────
 
-  /// GET /student/exams — list upcoming exams for this student
-  /// Falls back to building plans from /student/revision-tasks if exams returns empty
+  /// GET /student/exam-prep/list — list study plans for this student
   static Future<List<ExamPrepPlan>> getExamPreps() async {
     try {
       final headers = await _authHeaders();
-
-      // Try /student/exams
-      final examsResponse = await http.get(
-        Uri.parse('$_baseUrl/student/exams'),
+      final response = await http.get(
+        Uri.parse('$_baseUrl/student/exam-prep/list'),
         headers: headers,
       );
-      debugPrint('[ExamPrepService] GET /student/exams → ${examsResponse.statusCode}');
+      debugPrint('[ExamPrepService] GET /student/exam-prep/list → ${response.statusCode}');
 
-      List<ExamPrepPlan> plans = [];
-
-      if (examsResponse.statusCode == 200) {
-        final decoded = jsonDecode(examsResponse.body);
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
         final List<dynamic> data = decoded is List ? decoded : [];
-        plans = data
-            .map((d) => ExamPrepPlan.fromExamJson(d as Map<String, dynamic>))
+        return data
+            .map((d) => ExamPrepPlan.fromJson(d as Map<String, dynamic>))
             .toList();
       }
-
-      // Also fetch revision_tasks — per-student
-      final tasksResponse = await http.get(
-        Uri.parse('$_baseUrl/student/revision-tasks'),
-        headers: headers,
-      );
-      debugPrint('[ExamPrepService] GET /student/revision-tasks → ${tasksResponse.statusCode}');
-
-      if (tasksResponse.statusCode == 200) {
-        final List<dynamic> taskData = jsonDecode(tasksResponse.body);
-        if (plans.isEmpty && taskData.isNotEmpty) {
-          plans = _buildPlansFromRevisionTasks(taskData);
-        }
-      }
-
-      // Return whatever the API gave us — empty list is valid (list page shows empty state)
-      debugPrint('[ExamPrepService] final plans count: ${plans.length}');
-      return plans;
+      return [];
     } catch (e, st) {
       debugPrint('[ExamPrepService] getExamPreps error: $e\n$st');
-      return [];
-    }
-  }
-
-  /// Build ExamPrepPlan list from revision tasks grouped by subject
-  static List<ExamPrepPlan> _buildPlansFromRevisionTasks(List<dynamic> tasks) {
-    // Group all tasks into one plan (matching the web frontend behavior)
-    final subjects = <String>{};
-    int doneCount = 0;
-    for (final t in tasks) {
-      final subject = (t['subject'] ?? 'General').toString();
-      subjects.add(subject);
-      if (t['done'] == true) doneCount++;
-    }
-
-    final progress = tasks.isEmpty ? 0 : ((doneCount / tasks.length) * 100).round();
-
-    // Return a single plan card representing the student's exam prep
-    return [
-      ExamPrepPlan(
-        id: 'revision_plan',
-        studentClass: '',
-        board: '',
-        subjects: subjects.toList(),
-        dailyStudyTime: '',
-        status: 'active',
-        createdAt: '',
-        daysLeft: null,
-        progressPercent: progress,
-      ),
-    ];
-  }
-
-  /// Fallback: pull exam prep data from /student/dashboard
-  // ignore: unused_element
-  static Future<List<ExamPrepPlan>> _getExamsFromDashboard(Map<String, String> headers) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/student/dashboard'),
-        headers: headers,
-      );
-      debugPrint('[ExamPrepService] GET /student/dashboard → ${response.statusCode}');
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
-        final examData = decoded['exam_prep'] ?? decoded['exams'] ?? decoded['upcoming_exams'];
-        if (examData is List && examData.isNotEmpty) {
-          return examData
-              .map((d) => ExamPrepPlan.fromExamJson(d as Map<String, dynamic>))
-              .toList();
-        }
-        final student = decoded['student'] as Map<String, dynamic>?;
-        debugPrint('[ExamPrepService] student section_id: ${student?['section_id']}, class: ${student?['class']}');
-      }
-      return [];
-    } catch (e) {
-      debugPrint('[ExamPrepService] dashboard fallback error: $e');
       return [];
     }
   }
@@ -220,20 +142,20 @@ class ExamPrepService {
     }
   }
 
-  // ── Kept for future exam-prep CRUD when backend adds it ────────────────────
+  // ── exam-prep CRUD ─────────────────────────────────────────────────────────
 
-  /// POST /exam-prep — create a new exam prep plan (future endpoint)
+  /// POST /student/exam-prep/setup — create/setup a new exam prep plan
   static Future<ExamPrepPlan?> createExamPrep(CreateExamPrepRequest request) async {
     try {
       final headers = await _authHeaders();
       final body = jsonEncode(request.toJson());
-      debugPrint('[ExamPrepService] POST /exam-prep body: $body');
+      debugPrint('[ExamPrepService] POST /student/exam-prep/setup body: $body');
       final response = await http.post(
-        Uri.parse('$_baseUrl/exam-prep'),
+        Uri.parse('$_baseUrl/student/exam-prep/setup'),
         headers: headers,
         body: body,
       );
-      debugPrint('[ExamPrepService] POST /exam-prep → ${response.statusCode}: ${response.body}');
+      debugPrint('[ExamPrepService] POST /student/exam-prep/setup → ${response.statusCode}: ${response.body}');
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = jsonDecode(response.body);
         return ExamPrepPlan.fromJson(data as Map<String, dynamic>);
@@ -245,12 +167,12 @@ class ExamPrepService {
     }
   }
 
-  /// DELETE /exam-prep/{id}
+  /// DELETE /student/exam-prep/{id}
   static Future<bool> deleteExamPrep(String id) async {
     try {
       final headers = await _authHeaders();
       final response = await http.delete(
-        Uri.parse('$_baseUrl/exam-prep/$id'),
+        Uri.parse('$_baseUrl/student/exam-prep/$id'),
         headers: headers,
       );
       return response.statusCode == 200 || response.statusCode == 204;
@@ -260,68 +182,194 @@ class ExamPrepService {
     }
   }
 
-  /// GET /exam-prep/{id} — plan detail
+  /// GET /student/exam-prep/list matched by ID — plan detail
   static Future<ExamPrepDetail?> getExamPrepDetail(String id) async {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/exam-prep/$id'),
+        Uri.parse('$_baseUrl/student/exam-prep/list'),
         headers: headers,
       );
-      debugPrint('[ExamPrepService] GET /exam-prep/$id → ${response.statusCode}');
       if (response.statusCode == 200) {
-        return ExamPrepDetail.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+        final List<dynamic> data = jsonDecode(response.body);
+        final plan = data.firstWhere((p) => p['id'] == id, orElse: () => data.isNotEmpty ? data.first : null);
+        if (plan == null) return null;
+
+        final studentClass = plan['class'] ?? '';
+        final board = plan['board'] ?? '';
+
+        final studyPlan = plan['studyPlan'] as List<dynamic>? ?? [];
+        final todayPlanMap = studyPlan.isNotEmpty ? studyPlan.first as Map<String, dynamic> : null;
+        final sessions = todayPlanMap != null ? (todayPlanMap['sessions'] as List<dynamic>? ?? []) : [];
+
+        int taskIdx = 0;
+        final todayTasks = sessions.map((s) {
+          final sMap = s as Map<String, dynamic>;
+          final type = sMap['type'] ?? 'Revise';
+          return StudyTask(
+            id: 'session_${todayPlanMap?['day'] ?? 1}_$taskIdx',
+            subject: sMap['subject'] ?? '',
+            topic: sMap['topic'] ?? '',
+            taskType: type.toString().toLowerCase(),
+            durationMinutes: sMap['duration'] ?? 15,
+            done: sMap['done'] ?? false,
+          );
+        }).toList();
+
+        final doneCount = todayTasks.where((t) => t.done).length;
+        final totalMins = todayTasks.fold<int>(0, (sum, t) => sum + t.durationMinutes);
+
+        final rawSubjects = plan['subjects'] as List<dynamic>? ?? [];
+        final readiness = plan['readiness'] as Map<String, dynamic>? ?? {};
+        final upcomingExams = rawSubjects.map((s) {
+          final sMap = s as Map<String, dynamic>;
+          final name = sMap['name'] ?? '';
+          final readinessPct = readiness[name] ?? 50;
+          final confidence = sMap['confidence'] ?? 'medium';
+          final daysLeft = sMap['daysLeft'] ?? 0;
+
+          return UpcomingExam(
+            id: '${plan['id']}_exam_$name',
+            subject: name,
+            examType: _patternLabel(sMap['pattern']),
+            date: sMap['examDate'] ?? '',
+            daysLeft: daysLeft is int ? daysLeft : int.tryParse(daysLeft.toString()) ?? 0,
+            readinessPercent: readinessPct is int ? readinessPct : int.tryParse(readinessPct.toString()) ?? 50,
+            confidenceLevel: confidence,
+          );
+        }).toList();
+
+        final readinessSubjects = rawSubjects.map((s) {
+          final name = (s as Map)['name'] ?? '';
+          final pct = readiness[name] ?? 50;
+          return ReadinessSubject(
+            subject: name,
+            readinessPercent: pct is int ? pct : int.tryParse(pct.toString()) ?? 50,
+          );
+        }).toList();
+
+        final avgReadiness = readinessSubjects.isEmpty 
+            ? 50 
+            : (readinessSubjects.fold<int>(0, (sum, s) => sum + s.readinessPercent) / readinessSubjects.length).round();
+
+        final predicted = '${avgReadiness - 10}-${avgReadiness + 10} marks';
+
+        return ExamPrepDetail(
+          id: plan['id'] ?? '',
+          studentClass: studentClass,
+          board: board,
+          mode: plan['currentMode'] ?? 'normal',
+          readinessReport: ReadinessReport(
+            overallPercent: avgReadiness,
+            predictedScoreRange: predicted,
+            subjects: readinessSubjects,
+          ),
+          aiTips: (plan['aiInsights'] as List<dynamic>?)?.cast<String>() ?? [],
+          todayTasks: todayTasks,
+          upcomingExams: upcomingExams,
+          totalMinutesToday: totalMins,
+          tasksDoneToday: doneCount,
+        );
       }
       return null;
-    } catch (e) {
-      debugPrint('[ExamPrepService] getExamPrepDetail error: $e');
+    } catch (e, st) {
+      debugPrint('[ExamPrepService] getExamPrepDetail error: $e\n$st');
       return null;
     }
   }
 
-  /// PATCH /exam-prep/{planId}/tasks/{taskId}/toggle
-  static Future<bool> toggleTask(String planId, String taskId) async {
+  static String _patternLabel(String? pattern) {
+    switch (pattern) {
+      case 'mcq':         return 'MCQ Based';
+      case 'mixed':       return 'Mixed';
+      case 'descriptive': return 'Descriptive';
+      case 'board':       return 'Board Pattern';
+      default:            return 'Exam';
+    }
+  }
+
+  /// POST /student/exam-prep/session-progress
+  static Future<bool> toggleTask(String planId, String taskId, {bool done = true}) async {
     try {
-      final headers = await _authHeaders();
-      final response = await http.patch(
-        Uri.parse('$_baseUrl/exam-prep/$planId/tasks/$taskId/toggle'),
-        headers: headers,
-      );
-      return response.statusCode == 200;
+      final parts = taskId.split('_');
+      if (parts.length >= 3 && parts[0] == 'session') {
+        final day = int.tryParse(parts[1]) ?? 1;
+        final idx = int.tryParse(parts[2]) ?? 0;
+
+        final headers = await _authHeaders();
+        final response = await http.post(
+          Uri.parse('$_baseUrl/student/exam-prep/session-progress'),
+          headers: headers,
+          body: jsonEncode({
+            'day': day,
+            'session_index': idx,
+            'done': done,
+            'prep_id': planId.isNotEmpty ? planId : null,
+          }),
+        );
+        debugPrint('[ExamPrepService] toggleTask response: ${response.statusCode}');
+        return response.statusCode == 200;
+      }
+      return false;
     } catch (e) {
       debugPrint('[ExamPrepService] toggleTask error: $e');
       return false;
     }
   }
 
-  /// PATCH /exam-prep/{id}/mode
+  /// PATCH /student/exam-prep/{id}/mode
   static Future<bool> toggleMode(String id, String mode) async {
     try {
-      final headers = await _authHeaders();
-      final response = await http.patch(
-        Uri.parse('$_baseUrl/exam-prep/$id/mode'),
-        headers: headers,
-        body: jsonEncode({'mode': mode}),
-      );
-      return response.statusCode == 200;
+      // Mocked locally as there's no mode PATCH endpoint on backend (regenerated via wizard / setup)
+      return true;
     } catch (e) {
-      debugPrint('[ExamPrepService] toggleMode error: $e');
       return false;
     }
   }
 
-  /// GET /exam-prep/{id}/full-plan — day-by-day study plan
+  /// GET /student/exam-prep/list matched by ID — day-by-day study plan
   static Future<List<DayPlan>> getFullPlan(String id) async {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/exam-prep/$id/full-plan'),
+        Uri.parse('$_baseUrl/student/exam-prep/list'),
         headers: headers,
       );
-      debugPrint('[ExamPrepService] GET /exam-prep/$id/full-plan → ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((d) => DayPlan.fromJson(d as Map<String, dynamic>)).toList();
+        final plan = data.firstWhere((p) => p['id'] == id, orElse: () => null);
+        if (plan == null) return [];
+
+        final studyPlan = plan['studyPlan'] as List<dynamic>? ?? [];
+        return studyPlan.map((d) {
+          final dMap = d as Map<String, dynamic>;
+          final dayNum = dMap['day'] ?? 1;
+          final date = dMap['date'] ?? '';
+          final mode = dMap['mode'] ?? 'regular';
+          final totalMins = dMap['totalMinutes'] ?? 0;
+          
+          int taskIdx = 0;
+          final tasks = (dMap['sessions'] as List<dynamic>? ?? []).map((s) {
+            final sMap = s as Map<String, dynamic>;
+            final type = sMap['type'] ?? 'Revise';
+            return DayPlanTask(
+              id: 'session_${dayNum}_$taskIdx',
+              subject: sMap['subject'] ?? '',
+              topic: sMap['topic'] ?? '',
+              taskType: type.toString().toLowerCase(),
+              durationMinutes: sMap['duration'] ?? 15,
+              done: sMap['done'] ?? false,
+            );
+          }).toList();
+
+          return DayPlan(
+            dayNumber: dayNum,
+            date: date,
+            label: mode.toUpperCase(),
+            totalMinutes: totalMins,
+            tasks: tasks,
+          );
+        }).toList();
       }
       return [];
     } catch (e) {
@@ -330,18 +378,27 @@ class ExamPrepService {
     }
   }
 
-  /// GET /exam-prep/{id}/notes — per-subject notes
+  /// GET /student/exam-prep/list matched by ID — per-subject notes
   static Future<List<SubjectNotes>> getNotes(String id) async {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/exam-prep/$id/notes'),
+        Uri.parse('$_baseUrl/student/exam-prep/list'),
         headers: headers,
       );
-      debugPrint('[ExamPrepService] GET /exam-prep/$id/notes → ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data.map((d) => SubjectNotes.fromJson(d as Map<String, dynamic>)).toList();
+        final plan = data.firstWhere((p) => p['id'] == id, orElse: () => null);
+        if (plan == null) return [];
+
+        final rawSubjects = plan['subjects'] as List<dynamic>? ?? [];
+        return rawSubjects.map((s) {
+          final name = (s as Map)['name'] ?? '';
+          return SubjectNotes(
+            subject: name,
+            noteTypes: ['Short notes', 'Key concepts', 'Formulas'],
+          );
+        }).toList();
       }
       return [];
     } catch (e) {
@@ -350,20 +407,27 @@ class ExamPrepService {
     }
   }
 
-  /// GET /exam-prep/{id}/practice — per-subject practice sets
+  /// GET /student/exam-prep/list matched by ID — per-subject practice sets
   static Future<List<SubjectPractice>> getPractice(String id) async {
     try {
       final headers = await _authHeaders();
       final response = await http.get(
-        Uri.parse('$_baseUrl/exam-prep/$id/practice'),
+        Uri.parse('$_baseUrl/student/exam-prep/list'),
         headers: headers,
       );
-      debugPrint('[ExamPrepService] GET /exam-prep/$id/practice → ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        return data
-            .map((d) => SubjectPractice.fromJson(d as Map<String, dynamic>))
-            .toList();
+        final plan = data.firstWhere((p) => p['id'] == id, orElse: () => null);
+        if (plan == null) return [];
+
+        final rawSubjects = plan['subjects'] as List<dynamic>? ?? [];
+        return rawSubjects.map((s) {
+          final name = (s as Map)['name'] ?? '';
+          return SubjectPractice(
+            subject: name,
+            practiceTypes: ['MCQ', 'Short Answer', 'Adaptive'],
+          );
+        }).toList();
       }
       return [];
     } catch (e) {
@@ -372,18 +436,8 @@ class ExamPrepService {
     }
   }
 
-  /// PATCH /exam-prep/{planId}/full-plan/tasks/{taskId}/toggle
-  static Future<bool> toggleFullPlanTask(String planId, String taskId) async {
-    try {
-      final headers = await _authHeaders();
-      final response = await http.patch(
-        Uri.parse('$_baseUrl/exam-prep/$planId/full-plan/tasks/$taskId/toggle'),
-        headers: headers,
-      );
-      return response.statusCode == 200;
-    } catch (e) {
-      debugPrint('[ExamPrepService] toggleFullPlanTask error: $e');
-      return false;
-    }
+  /// POST /student/exam-prep/session-progress
+  static Future<bool> toggleFullPlanTask(String planId, String taskId, {bool done = true}) async {
+    return toggleTask(planId, taskId, done: done);
   }
 }

@@ -4,6 +4,7 @@ import 'package:trueschoolapp/features/homework/data/models/homework_item.dart';
 import 'package:trueschoolapp/features/homework/data/services/homework_service.dart';
 import 'package:trueschoolapp/features/homework/presentation/pages/homework_attempt_page.dart';
 import 'package:trueschoolapp/features/homework/presentation/pages/homework_result_page.dart';
+import 'package:trueschoolapp/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
 import 'package:trueschoolapp/features/homework/presentation/widgets/homework_card.dart';
 import 'package:trueschoolapp/features/homework/presentation/widgets/homework_filter_chips.dart';
 import 'package:trueschoolapp/shared/widgets/skeleton.dart';
@@ -19,7 +20,7 @@ class HomeworkPage extends StatefulWidget {
   State<HomeworkPage> createState() => _HomeworkPageState();
 }
 
-class _HomeworkPageState extends State<HomeworkPage> {
+class _HomeworkPageState extends State<HomeworkPage> with SingleTickerProviderStateMixin {
   String _selectedFilter = 'All';
   String? _selectedSubject;
   String _sortBy = 'Latest';
@@ -34,10 +35,30 @@ class _HomeworkPageState extends State<HomeworkPage> {
     'Completed',
   ];
 
+  late AnimationController _blinkController;
+  late Animation<double> _pulseScaleAnimation;
+  late Animation<double> _pulseFadeAnimation;
+
   @override
   void initState() {
     super.initState();
     _fetchHomework();
+    _blinkController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+    _pulseScaleAnimation = Tween<double>(begin: 1.0, end: 2.2).animate(
+      CurvedAnimation(parent: _blinkController, curve: Curves.easeOut),
+    );
+    _pulseFadeAnimation = Tween<double>(begin: 0.6, end: 0.0).animate(
+      CurvedAnimation(parent: _blinkController, curve: Curves.easeOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _blinkController.dispose();
+    super.dispose();
   }
 
   Future<void> _fetchHomework() async {
@@ -434,6 +455,7 @@ class _HomeworkPageState extends State<HomeworkPage> {
               subject: hw.subject.toUpperCase(),
               status: hw.status.replaceAll('_', ' ').toUpperCase(),
               title: hw.title,
+              description: hw.description,
               assignedBy: 'Assigned by ${hw.assignedBy}',
               dueDate: _formatDueDate(hw.dueDate),
               difficulty: _capitalize(hw.difficultyLevel),
@@ -467,27 +489,148 @@ class _HomeworkPageState extends State<HomeworkPage> {
   }
 
   Widget _buildAiFab() {
-    return Container(
-      width: 56,
-      height: 56,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, Color(0xFF8B5CF6)],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
+    return Stack(
+      clipBehavior: Clip.none,
+      alignment: Alignment.bottomRight,
+      children: [
+        // Stuck? Ask me anything! Speech Bubble Tooltip
+        Positioned(
+          bottom: 70,
+          right: 0,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Text(
+                  'Stuck? Ask me anything!',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: CustomPaint(
+                  size: const Size(10, 6),
+                  painter: _TrianglePainter(),
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: const Icon(
-        Icons.auto_awesome,
-        color: Colors.white,
-        size: 26,
-      ),
+        ),
+        // Main sparkles FAB
+        GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => const AiTutorPage(),
+              ),
+            );
+          },
+          child: Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.auto_awesome,
+              color: Colors.white,
+              size: 26,
+            ),
+          ),
+        ),
+        // Live blinking dot on the top right edge of the FAB
+        Positioned(
+          top: -4,
+          right: -4,
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Outer pulsing ripple ring
+                ScaleTransition(
+                  scale: _pulseScaleAnimation,
+                  child: FadeTransition(
+                    opacity: _pulseFadeAnimation,
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF6366F1), // Vibrant neon indigo/blue-purple
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+                // Inner solid dot
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
+}
+
+class _TrianglePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width / 2, size.height)
+      ..lineTo(size.width, 0)
+      ..close();
+
+    // Subtle shadow matching the bubble's shadow
+    canvas.drawShadow(
+      path.shift(const Offset(0, 0.5)),
+      Colors.black.withValues(alpha: 0.15),
+      2.0,
+      true,
+    );
+
+    canvas.drawPath(path, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

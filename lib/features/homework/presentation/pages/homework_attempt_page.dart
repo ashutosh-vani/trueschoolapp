@@ -6,6 +6,7 @@ import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/homework/data/models/homework_question.dart';
 import 'package:trueschoolapp/features/homework/data/services/homework_service.dart';
 import 'package:trueschoolapp/features/homework/presentation/pages/homework_result_page.dart';
+import 'package:trueschoolapp/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
 
 class HomeworkAttemptPage extends StatefulWidget {
   final String homeworkId;
@@ -66,17 +67,25 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
       ]);
 
       final detail = results[0] as Map<String, dynamic>?;
-      final questions = results[1] as List<HomeworkQuestion>;
+      var questions = results[1] as List<HomeworkQuestion>;
 
       if (mounted) {
         setState(() {
-          _questions = questions;
-          _isLoading = false;
           if (detail != null) {
             _submissionType = detail['submission_type'] ?? detail['submissionType'] ?? 'online_quiz';
             _instructions = detail['instructions'];
             _description = detail['description'];
+
+            // Fallback: if questions endpoint returns empty list, try to parse from the detail's questions list
+            if (questions.isEmpty && detail['questions'] != null) {
+              final rawQuestions = detail['questions'] as List<dynamic>;
+              questions = rawQuestions
+                  .map((q) => HomeworkQuestion.fromJson(Map<String, dynamic>.from(q as Map)))
+                  .toList();
+            }
           }
+          _questions = questions;
+          _isLoading = false;
           if (_submissionType == 'online_quiz' && questions.isEmpty) {
             _errorMessage = 'No questions found for this homework.';
           }
@@ -144,15 +153,18 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
     final answersPayload = _questions.map((q) {
       final activeType = _getActiveType(q);
       String? answer;
+      String? fileUrl;
       if (activeType == 'upload') {
         // Prefer the remote URL; fall back to local path if upload failed
-        answer = uploadedUrls[q.id] ?? _uploadFiles[q.id]?.path;
+        fileUrl = uploadedUrls[q.id] ?? _uploadFiles[q.id]?.path;
+        answer = fileUrl;
       } else {
         answer = _answers[q.id];
       }
       return {
         'question_id': q.id,
         'answer': answer,
+        'file_url': fileUrl,
         'answer_type': activeType,
       };
     }).toList();
@@ -673,9 +685,12 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
         children: [
           GestureDetector(
             onTap: _showSaveExitDialog,
-            child: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+            child: const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.arrow_back_rounded, color: AppColors.textPrimary),
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 4),
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -689,29 +704,33 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
             child: Text(
               widget.title,
               style: const TextStyle(
-                fontSize: 15,
+                fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
               ),
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
+          const SizedBox(width: 8),
           _buildHeaderPill(
-            label: 'Ask\nLumi',
+            label: 'Ask Lumi',
             filled: true,
             icon: Icons.smart_toy_outlined,
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Lumi coming soon!')),
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AiTutorPage(),
+                ),
               );
             },
           ),
           const SizedBox(width: 8),
           _buildHeaderPill(
-            label: 'Save\n& Exit',
+            label: 'Save & Exit',
             filled: false,
-            icon: null,
+            icon: Icons.exit_to_app_rounded,
             onTap: _showSaveExitDialog,
           ),
         ],
@@ -728,7 +747,7 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: filled ? AppColors.primary : Colors.grey.shade100,
           borderRadius: BorderRadius.circular(20),
@@ -737,17 +756,20 @@ class _HomeworkAttemptPageState extends State<HomeworkAttemptPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 14, color: filled ? Colors.white : AppColors.textSecondary),
-              const SizedBox(width: 4),
+              Icon(
+                icon,
+                size: 15,
+                color: filled ? Colors.white : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 6),
             ],
             Text(
               label,
-              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w600,
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
                 color: filled ? Colors.white : AppColors.textSecondary,
-                height: 1.2,
+                height: 1.1,
               ),
             ),
           ],

@@ -4,6 +4,7 @@ import 'package:trueschoolapp/features/learning_gaps/data/learning_gap_fallback.
 import 'package:trueschoolapp/features/learning_gaps/data/models/learning_gap_model.dart';
 import 'package:trueschoolapp/features/learning_gaps/data/services/learning_gap_service.dart';
 import 'package:trueschoolapp/features/learning_gaps/presentation/pages/gap_remediation_page.dart';
+import 'package:trueschoolapp/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
 
 // ── Severity config ────────────────────────────────────────────────────────────
 const _kSeverityLabel = {
@@ -411,7 +412,14 @@ class _LearningGapsPageState extends State<LearningGapsPage> {
           ),
           const SizedBox(height: 14),
           OutlinedButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AiTutorPage(),
+                ),
+              );
+            },
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFFEC5B13),
               side: const BorderSide(color: Color(0xFFEC5B13)),

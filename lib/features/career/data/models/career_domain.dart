@@ -175,6 +175,8 @@ class Career {
   final String? salary;
   final String? education;
   final List<String> skills;
+  final String? badge;
+  final String? badgeColor;
 
   // Rich detail fields (populated from /career/:domainId/:careerId)
   final int? matchPercent;
@@ -198,6 +200,8 @@ class Career {
     this.salary,
     this.education,
     this.skills = const [],
+    this.badge,
+    this.badgeColor,
     this.matchPercent,
     this.avgSalary,
     this.growthOutlook,
@@ -217,10 +221,12 @@ class Career {
       id: json['_id'] ?? json['id'] ?? '',
       domainId: json['domain_id'] ?? json['domainId'] ?? '',
       title: json['title'] ?? json['name'] ?? '',
-      description: json['description'] ?? '',
+      description: json['description'] ?? json['subtitle'] ?? '',
       salary: json['salary'],
       education: json['education'],
       skills: (json['skills'] as List<dynamic>?)?.cast<String>() ?? [],
+      badge: json['badge'],
+      badgeColor: json['badgeColor'] ?? json['badge_color'],
       matchPercent: (json['matchPercent'] as num?)?.toInt(),
       avgSalary: json['avgSalary'],
       growthOutlook: json['growthOutlook'],

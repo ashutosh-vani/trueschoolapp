@@ -4,6 +4,7 @@ import 'package:trueschoolapp/app/theme/app_colors.dart';
 import 'package:trueschoolapp/features/progress/data/models/learning_gap_models.dart';
 import 'package:trueschoolapp/features/progress/data/services/learning_gap_service.dart';
 import 'package:trueschoolapp/features/progress/presentation/pages/gap_remediation_page.dart';
+import 'package:trueschoolapp/features/ai_tutor/presentation/pages/ai_tutor_page.dart';
 
 const _kOrange = Color(0xFFEC5B13);
 
@@ -81,7 +82,14 @@ class _LearningGapsListPageState extends State<LearningGapsListPage> {
     return Scaffold(
       backgroundColor: AppColors.background,
       floatingActionButton: FloatingActionButton(
-        onPressed: () {},
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => const AiTutorPage(),
+            ),
+          );
+        },
         backgroundColor: _kOrange,
         shape: const CircleBorder(),
         child: const Icon(Icons.chat_outlined, color: Colors.white),
@@ -337,7 +345,14 @@ class _LearningGapsListPageState extends State<LearningGapsListPage> {
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.5)),
           const SizedBox(height: 16),
           OutlinedButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const AiTutorPage(),
+                ),
+              );
+            },
             style: OutlinedButton.styleFrom(
               side: const BorderSide(color: _kOrange),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -573,7 +588,14 @@ class _GapCard extends StatelessWidget {
               width: double.infinity,
               height: 46,
               child: OutlinedButton.icon(
-                onPressed: () {},
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const AiTutorPage(),
+                    ),
+                  );
+                },
                 style: OutlinedButton.styleFrom(
                   side: BorderSide(color: AppColors.primary.withValues(alpha: 0.3)),
                   backgroundColor: AppColors.primary.withValues(alpha: 0.05),
